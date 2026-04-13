@@ -1,0 +1,50 @@
+#compdef claude
+# Thin loader for claude-code-completions.
+# On first use (or when claude version changes), regenerates completion into cache.
+# Falls back to the static pre-generated completion shipped with the package.
+
+_claude() {
+  local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/claude-code-completions"
+  local version
+  version="$(command claude --version 2>/dev/null | tr -d ' ()/' )"
+  [[ -z "$version" ]] && version="unknown"
+  local cache_file="$cache_dir/_claude-$version"
+
+  if [[ ! -f "$cache_file" ]]; then
+    # Locate the generator (installed alongside this loader by Homebrew)
+    # Priority: $CLAUDE_COMPLETIONS_BIN env var, then common prefixes.
+    local gen="${CLAUDE_COMPLETIONS_BIN:-}"
+    if [[ -z "$gen" ]]; then
+      for candidate in \
+        "$(brew --prefix 2>/dev/null)/bin/claude-code-completions" \
+        "/opt/homebrew/bin/claude-code-completions" \
+        "/usr/local/bin/claude-code-completions"; do
+        [[ -x "$candidate" ]] && { gen="$candidate"; break; }
+      done
+    fi
+
+    mkdir -p "$cache_dir"
+    if [[ -x "$gen" ]]; then
+      "$gen" generate --shell zsh > "$cache_file" 2>/dev/null || {
+        # Fall back to the static shipped completion
+        local static_file="${0:A:h}/../share/claude-code-completions/_claude.static"
+        [[ -f "$static_file" ]] && cp "$static_file" "$cache_file"
+      }
+    else
+      local static_file="${0:A:h}/../share/claude-code-completions/_claude.static"
+      [[ -f "$static_file" ]] && cp "$static_file" "$cache_file"
+    fi
+  fi
+
+  # Source the cached completion. It defines _claude (same function name),
+  # overriding this loader, so subsequent invocations skip the loader entirely.
+  if [[ -f "$cache_file" ]]; then
+    unfunction _claude 2>/dev/null
+    source "$cache_file"
+    _claude "$@"
+  else
+    _default "$@"
+  fi
+}
+
+_claude "$@"

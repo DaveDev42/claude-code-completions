@@ -1,0 +1,22 @@
+{
+  "name": "claude-code-completions",
+  "version": "0.1.0",
+  "description": "Shell completions for the Claude Code CLI (zsh, bash, fish)",
+  "bin": {
+    "claude-code-completions": "bin/claude-code-completions.js"
+  },
+  "scripts": {
+    "generate": "node bin/claude-code-completions.js generate --all --out completions",
+    "test": "node test/parse.test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DaveDev42/claude-code-completions.git"
+  },
+  "type": "module",
+  "license": "MIT",
+  "author": "DaveDev42",
+  "engines": {
+    "node": ">=18"
+  }
+}
