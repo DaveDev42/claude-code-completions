@@ -40,10 +40,19 @@ function formatOption(opt) {
   if (flags.length === 1) {
     return `  '${variadic}${flags[0]}[${desc}]${action}'`;
   }
-  // Mutex group: (-c --continue){-c,--continue}'[desc]action'
+  // For variadic options, the `(group){brace}` form confuses zsh's
+  // _arguments parser ("invalid rest argument definition") because the
+  // leading `*` looks like a positional rest spec. Emit one line per
+  // alias instead — slightly more verbose but always valid.
+  if (variadic) {
+    return flags
+      .map(f => `  '${variadic}${f}[${desc}]${action}'`)
+      .join('\n');
+  }
+  // Mutex group for non-variadic: (-c --continue){-c,--continue}'[desc]action'
   const group = `(${flags.join(' ')})`;
   const brace = `{${flags.join(',')}}`;
-  return `  '${variadic}${group}'${brace}'[${desc}]${action}'`;
+  return `  '${group}'${brace}'[${desc}]${action}'`;
 }
 
 function formatCommand(cmd) {

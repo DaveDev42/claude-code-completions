@@ -63,11 +63,30 @@ XDG_CACHE_HOME=/tmp/xdg CLAUDE_COMPLETIONS_BIN="$PWD/bin/claude-code-completions
   옛 버전 항목을 prune 한다. cron / launchd / SessionStart hook 에서 호출해
   claude 업그레이드 직후 첫 탭 지연을 없애는 용도.
 - `claude-code-completions audit` 는 `src/overrides.js` 를 현재 `claude --help`
-  와 비교해 drift 를 잡는다 (orphan override, enum 값 누락 등). update.yml cron
-  이 매주 돌리고 결과를 PR 본문에 포함한다. 새 모델/permission-mode 가 추가되면
-  enum-missing 에러로 보임 → 사람이 `overrides.js` 를 갱신해야 함.
+  와 비교해 drift 를 잡는다 (orphan override, enum 값 누락 등). 새 모델/permission-mode
+  가 추가되면 enum-missing 에러로 보임 → 사람이 `overrides.js` 갱신 + 새 release
+  까지 해줘야 사용자 머신에 반영된다. CI 가 audit 을 자동 실행하지는 않음 (cron PR
+  운영 부담이 크고 사용자 머신은 generator 코드가 v0.x.y 에 박혀있어 단순 데이터
+  PR 로 해결되지 않기 때문).
+- Loader 의 fast path: `cache_dir/.claude-meta` 한 줄 (`path\tmtime\tversion`).
+  claude 바이너리의 path+mtime 이 일치하면 `claude --version` spawn 없이 캐시
+  바로 source. 측정: slow path 1.16s → fast path 0.043s.
+- `slash-commands/upgrade-completion.md` 는 사용자 측 `~/.claude/commands/` 에
+  심볼릭 링크 거는 용. brew formula 가 `pkgshare/slash-commands/` 에 install
+  하고 caveats 에 ln 명령 안내.
 - 이 repo 자체는 캐시를 사용하지 않음 — `completions/` 는 fallback 산출물 (loader가
-  generator를 못 돌릴 때만 사용; 평소엔 항상 캐시가 우선). `.github/workflows/update.yml`
-  cron이 매주 월요일 06:00 UTC 에 새 claude 버전으로 재생성해 PR 을 연다.
+  generator를 못 돌릴 때만 사용; 평소엔 항상 캐시가 우선). 옛날엔 매주 cron 으로
+  refresh PR 을 만들었지만 v0.3.0 에서 제거 (재배포 동반 안 되면 사용자 영향 0,
+  머지 부담만 큼). 필요 시 수동으로 `npm run generate` + commit.
 - Repo에 편집 금지 바이너리 결과물: `completions/` (생성물). 수정은 `src/` 또는
   `src/overrides.js` 에서.
+
+## generator 주의
+
+**zsh `_arguments` spec 의 variadic + mutex 조합은 금지**. `'*(--a --b){--a,--b}[..]'`
+형태는 zsh 가 "invalid rest argument definition" 으로 거부하고 그 cached 파일이
+`_claude` 함수 정의를 못 끝내 `command not found: _claude` 가 follow up 으로 터진다.
+v0.2.0 에서 이 버그가 production 까지 갔다. v0.3.0 에서는 variadic 이면 alias 별
+한 줄씩 펼쳐 emit. `test/generators.test.js` 의 "5b. variadic + mutex" 회귀 케이스
+참고. 새 zsh 패턴 추가 시 `zsh -n` 만으로는 부족하고 `compinit` 후 실제 source
+시뮬까지 해보는 게 안전.

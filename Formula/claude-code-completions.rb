@@ -25,6 +25,21 @@ class ClaudeCodeCompletions < Formula
     (pkgshare/"_claude.static").write (buildpath/"completions/_claude").read
     (pkgshare/"claude.bash.static").write (buildpath/"completions/claude.bash").read
     (pkgshare/"claude.fish.static").write (buildpath/"completions/claude.fish").read
+
+    # Slash command users can symlink into ~/.claude/commands/
+    (pkgshare/"slash-commands").install Dir["slash-commands/*.md"]
+  end
+
+  def caveats
+    <<~EOS
+      To enable the /upgrade-completion slash command in Claude Code:
+
+        mkdir -p ~/.claude/commands
+        ln -sf #{opt_pkgshare}/slash-commands/upgrade-completion.md \\
+               ~/.claude/commands/upgrade-completion.md
+
+      Then in any Claude Code session: /upgrade-completion
+    EOS
   end
 
   test do

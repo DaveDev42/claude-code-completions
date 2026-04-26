@@ -107,6 +107,21 @@ for (const opt of tortureIR.options) {
   assert.ok(flagInFish(tortureFish, opt.flags[0]), `torture fish missing ${opt.flags[0]}`);
 }
 
+// 5b. variadic + mutex: zsh's _arguments parser rejects `'*(--a --b){--a,--b}...'`
+//     as "invalid rest argument definition". Generator must emit one line per
+//     alias instead. Regression for the v0.2.0 zsh breakage.
+const variadicMutexIR = {
+  version: 'vm-1',
+  options: [
+    { flags: ['--allowedTools', '--allowed-tools'], arg: { name: 'tools', variadic: true, required: true, choices: null }, description: 'Comma list' },
+  ],
+  commands: [],
+};
+const vmZsh = generateZsh(variadicMutexIR);
+assert.doesNotMatch(vmZsh, /'\*\(--/, 'zsh must not combine * variadic marker with ( ) mutex group');
+assert.match(vmZsh, /'\*--allowedTools\[/, 'zsh should emit --allowedTools as its own variadic line');
+assert.match(vmZsh, /'\*--allowed-tools\[/, 'zsh should emit --allowed-tools as its own variadic line');
+
 // 6. bash: round-trip + COMPREPLY structure
 const bash = generateBash(ir);
 assert.match(bash, /complete .*-F .*_claude/, 'bash script must register completion');
