@@ -1,4 +1,4 @@
-# Auto-generated from `claude --help` (version: 2.1.104 (Claude Code))
+# Auto-generated from `claude --help` (version: 2.1.119 (Claude Code))
 # bash completion for claude
 
 _claude_completions() {
