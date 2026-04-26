@@ -15,6 +15,7 @@ import { generateBash } from '../src/generators/bash.js';
 import { generateFish } from '../src/generators/fish.js';
 import { auditOverrides, formatAuditReport } from '../src/audit.js';
 import { doctor } from '../src/doctor.js';
+import { listAgents, listSessions } from '../src/sources.js';
 
 const GENERATORS = {
   zsh: { gen: generateZsh, filename: '_claude', cachePrefix: '_claude-' },
@@ -138,6 +139,14 @@ function cmdAudit(opts) {
   if (!report.ok && !opts['no-exit']) process.exit(1);
 }
 
+function cmdListAgents() {
+  for (const line of listAgents()) process.stdout.write(line + '\n');
+}
+
+function cmdListSessions() {
+  for (const line of listSessions()) process.stdout.write(line + '\n');
+}
+
 async function cmdDoctor() {
   const r = await doctor();
   console.log(r.text);
@@ -154,6 +163,8 @@ Usage:
   claude-code-completions prefetch [--cache-dir DIR]
   claude-code-completions audit [--help-file FILE] [--no-exit]
   claude-code-completions doctor
+  claude-code-completions list-agents
+  claude-code-completions list-sessions
 
 Options:
   --shell      Target shell (zsh, bash, fish). Default: zsh
@@ -179,6 +190,8 @@ switch (cmd) {
   case 'prefetch': cmdPrefetch(args); break;
   case 'audit': cmdAudit(args); break;
   case 'doctor': cmdDoctor(); break;
+  case 'list-agents': cmdListAgents(); break;
+  case 'list-sessions': cmdListSessions(); break;
   case 'help':
   case undefined:
     cmdHelp();

@@ -11,6 +11,14 @@ const zshEscape = (s) =>
 function actionForFlag(flags, arg) {
   if (!arg) return '';
   const primary = flags.find(f => f.startsWith('--')) || flags[0];
+  // Dynamic source wins over choices/file: --resume's choices are the live
+  // session list, not a static enum.
+  if (arg.dynamicSource === 'agents') {
+    return `:${arg.name}:__claude_agents`;
+  }
+  if (arg.dynamicSource === 'sessions') {
+    return `:${arg.name}:__claude_sessions`;
+  }
   if (arg.choices && arg.choices.length > 0) {
     return `:${arg.name}:(${arg.choices.join(' ')})`;
   }
@@ -100,6 +108,51 @@ export function generateZsh(ir) {
   // and then call `_claude "$@"` to drive completion. Without the wrapper,
   // zsh's normal autoload would build the function for us, but the loader
   // bypasses autoload by sourcing the cached file directly.
+  // Helper functions for dynamic completions. They shell out to the
+  // claude-code-completions CLI, which prints "<value>\t<description>" per
+  // line. zsh _describe takes "value:description" pairs.
+  lines.push('__claude_run_source() {');
+  lines.push('  local subcmd=$1');
+  lines.push('  local bin="${CLAUDE_COMPLETIONS_BIN:-claude-code-completions}"');
+  lines.push('  command "$bin" "$subcmd" 2>/dev/null');
+  lines.push('}');
+  lines.push('');
+  lines.push('__claude_agents() {');
+  lines.push('  local -a entries');
+  lines.push("  entries=(${(f)\"$(__claude_run_source list-agents)\"})");
+  lines.push('  local -a values');
+  lines.push('  local line name desc');
+  lines.push('  for line in $entries; do');
+  lines.push("    name=\"${line%%$'\\t'*}\"");
+  lines.push("    desc=\"${line#*$'\\t'}\"");
+  lines.push('    [[ -z "$name" ]] && continue');
+  lines.push('    if [[ -n "$desc" && "$desc" != "$name" ]]; then');
+  lines.push('      values+=("${name}:${desc}")');
+  lines.push('    else');
+  lines.push('      values+=("$name")');
+  lines.push('    fi');
+  lines.push('  done');
+  lines.push("  _describe -t agents 'agent' values");
+  lines.push('}');
+  lines.push('');
+  lines.push('__claude_sessions() {');
+  lines.push('  local -a entries');
+  lines.push("  entries=(${(f)\"$(__claude_run_source list-sessions)\"})");
+  lines.push('  local -a values');
+  lines.push('  local line uuid desc');
+  lines.push('  for line in $entries; do');
+  lines.push("    uuid=\"${line%%$'\\t'*}\"");
+  lines.push("    desc=\"${line#*$'\\t'}\"");
+  lines.push('    [[ -z "$uuid" ]] && continue');
+  lines.push('    if [[ -n "$desc" ]]; then');
+  lines.push('      values+=("${uuid}:${desc}")');
+  lines.push('    else');
+  lines.push('      values+=("$uuid")');
+  lines.push('    fi');
+  lines.push('  done');
+  lines.push("  _describe -t sessions 'session' values");
+  lines.push('}');
+  lines.push('');
   lines.push('_claude() {');
   lines.push('  local curcontext="$curcontext" state line ret=1');
   lines.push('  typeset -A opt_args');

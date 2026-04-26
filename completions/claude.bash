@@ -5,8 +5,32 @@ _claude_completions() {
   local cur prev words cword
   _init_completion || return
 
-  # Previous word determines enum completion
+  # Previous word determines enum or dynamic completion
   case "$prev" in
+    --agent)
+      COMPREPLY=($(compgen -W "$(${CLAUDE_COMPLETIONS_BIN:-claude-code-completions} list-agents 2>/dev/null | cut -f1)" -- "$cur"))
+      return 0
+      ;;
+    -r)
+      COMPREPLY=($(compgen -W "$(${CLAUDE_COMPLETIONS_BIN:-claude-code-completions} list-sessions 2>/dev/null | cut -f1)" -- "$cur"))
+      return 0
+      ;;
+    --resume)
+      COMPREPLY=($(compgen -W "$(${CLAUDE_COMPLETIONS_BIN:-claude-code-completions} list-sessions 2>/dev/null | cut -f1)" -- "$cur"))
+      return 0
+      ;;
+    --session-id)
+      COMPREPLY=($(compgen -W "$(${CLAUDE_COMPLETIONS_BIN:-claude-code-completions} list-sessions 2>/dev/null | cut -f1)" -- "$cur"))
+      return 0
+      ;;
+    --allowedTools)
+      COMPREPLY=($(compgen -W "Agent Bash Edit Glob Grep NotebookEdit Read Task TodoWrite WebFetch WebSearch Write" -- "$cur"))
+      return 0
+      ;;
+    --disallowedTools)
+      COMPREPLY=($(compgen -W "Agent Bash Edit Glob Grep NotebookEdit Read Task TodoWrite WebFetch WebSearch Write" -- "$cur"))
+      return 0
+      ;;
     --effort)
       COMPREPLY=($(compgen -W "low medium high max" -- "$cur"))
       return 0
@@ -33,6 +57,10 @@ _claude_completions() {
       ;;
     --setting-sources)
       COMPREPLY=($(compgen -W "user project local" -- "$cur"))
+      return 0
+      ;;
+    --tools)
+      COMPREPLY=($(compgen -W "Agent Bash Edit Glob Grep NotebookEdit Read Task TodoWrite WebFetch WebSearch Write" -- "$cur"))
       return 0
       ;;
   esac

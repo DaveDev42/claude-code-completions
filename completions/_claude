@@ -2,6 +2,48 @@
 # Auto-generated from `claude --help` (version: 2.1.119 (Claude Code))
 # Do not edit manually — regenerate via claude-code-completions.
 
+__claude_run_source() {
+  local subcmd=$1
+  local bin="${CLAUDE_COMPLETIONS_BIN:-claude-code-completions}"
+  command "$bin" "$subcmd" 2>/dev/null
+}
+
+__claude_agents() {
+  local -a entries
+  entries=(${(f)"$(__claude_run_source list-agents)"})
+  local -a values
+  local line name desc
+  for line in $entries; do
+    name="${line%%$'\t'*}"
+    desc="${line#*$'\t'}"
+    [[ -z "$name" ]] && continue
+    if [[ -n "$desc" && "$desc" != "$name" ]]; then
+      values+=("${name}:${desc}")
+    else
+      values+=("$name")
+    fi
+  done
+  _describe -t agents 'agent' values
+}
+
+__claude_sessions() {
+  local -a entries
+  entries=(${(f)"$(__claude_run_source list-sessions)"})
+  local -a values
+  local line uuid desc
+  for line in $entries; do
+    uuid="${line%%$'\t'*}"
+    desc="${line#*$'\t'}"
+    [[ -z "$uuid" ]] && continue
+    if [[ -n "$desc" ]]; then
+      values+=("${uuid}:${desc}")
+    else
+      values+=("$uuid")
+    fi
+  done
+  _describe -t sessions 'session' values
+}
+
 _claude() {
   local curcontext="$curcontext" state line ret=1
   typeset -A opt_args
@@ -24,11 +66,11 @@ _claude() {
   local -a global_opts
   global_opts=(
     '*--add-dir[Additional directories to allow tool access to]:directories:_directories'
-    '--agent[Agent for the current session. Overrides the '\''agent'\'' setting.]:agent:'
+    '--agent[Agent for the current session. Overrides the '\''agent'\'' setting.]:agent:__claude_agents'
     '--agents[JSON object defining custom agents (e.g. '\''{"reviewer"\: {"description"\: "Reviews code", "prompt"\: "You are a code reviewer"}}'\'')]:json:'
     '--allow-dangerously-skip-permissions[Enable bypassing all permission checks as an option, without it being enabled by default. Recommended only for sandboxes with no internet access.]'
-    '*--allowedTools[Comma or space-separated list of tool names to allow (e.g. "Bash(git *) Edit")]:tools:'
-  '*--allowed-tools[Comma or space-separated list of tool names to allow (e.g. "Bash(git *) Edit")]:tools:'
+    '*--allowedTools[Comma or space-separated list of tool names to allow (e.g. "Bash(git *) Edit")]:tools:(Agent Bash Edit Glob Grep NotebookEdit Read Task TodoWrite WebFetch WebSearch Write)'
+  '*--allowed-tools[Comma or space-separated list of tool names to allow (e.g. "Bash(git *) Edit")]:tools:(Agent Bash Edit Glob Grep NotebookEdit Read Task TodoWrite WebFetch WebSearch Write)'
     '--append-system-prompt[Append a system prompt to the default system prompt]:prompt:'
     '--bare[Minimal mode\: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and CLAUDE.md auto-discovery. Sets CLAUDE_CODE_SIMPLE=1. Anthropic auth is strictly ANTHROPIC_API_KEY or apiKeyHelper via --settings (OAuth and keychain are never read). 3P providers (Bedrock/Vertex/Foundry) use their own credentials. Skills still resolve via /skill-name. Explicitly provide context via\: --system-prompt\[-file\], --append-system-prompt\[-file\], --add-dir (CLAUDE.md dirs), --mcp-config, --settings, --agents, --plugin-dir.]'
     '*--betas[Beta headers to include in API requests (API key users only)]:betas:'
@@ -39,8 +81,8 @@ _claude() {
     '(-d --debug)'{-d,--debug}'[Enable debug mode with optional category filtering (e.g., "api,hooks" or "!1p,!file")]::filter:'
     '--debug-file[Write debug logs to a specific file path (implicitly enables debug mode)]:path:_files'
     '--disable-slash-commands[Disable all skills]'
-    '*--disallowedTools[Comma or space-separated list of tool names to deny (e.g. "Bash(git *) Edit")]:tools:'
-  '*--disallowed-tools[Comma or space-separated list of tool names to deny (e.g. "Bash(git *) Edit")]:tools:'
+    '*--disallowedTools[Comma or space-separated list of tool names to deny (e.g. "Bash(git *) Edit")]:tools:(Agent Bash Edit Glob Grep NotebookEdit Read Task TodoWrite WebFetch WebSearch Write)'
+  '*--disallowed-tools[Comma or space-separated list of tool names to deny (e.g. "Bash(git *) Edit")]:tools:(Agent Bash Edit Glob Grep NotebookEdit Read Task TodoWrite WebFetch WebSearch Write)'
     '--effort[Effort level for the current session (low, medium, high, xhigh, max)]:level:(low medium high max)'
     '--exclude-dynamic-system-prompt-sections[Move per-machine sections (cwd, env info, memory paths, git status) from the system prompt into the first user message. Improves cross-user prompt-cache reuse. Only applies with the default system prompt (ignored with --system-prompt). (default\: false)]'
     '--fallback-model[Enable automatic fallback to specified model when default model is overloaded (only works with --print)]:model:(sonnet opus haiku claude-sonnet-4-6 claude-opus-4-6 claude-haiku-4-5-20251001)'
@@ -66,14 +108,14 @@ _claude() {
     '(-p --print)'{-p,--print}'[Print response and exit (useful for pipes). Note\: The workspace trust dialog is skipped when Claude is run with the -p mode. Only use this flag in directories you trust.]'
     '--remote-control-session-name-prefix[Prefix for auto-generated Remote Control session names (default\: hostname)]:prefix:'
     '--replay-user-messages[Re-emit user messages from stdin back on stdout for acknowledgment (only works with --input-format=stream-json and --output-format=stream-json)]'
-    '(-r --resume)'{-r,--resume}'[Resume a conversation by session ID, or open interactive picker with optional search term]::value:'
-    '--session-id[Use a specific session ID for the conversation (must be a valid UUID)]:uuid:'
+    '(-r --resume)'{-r,--resume}'[Resume a conversation by session ID, or open interactive picker with optional search term]::value:__claude_sessions'
+    '--session-id[Use a specific session ID for the conversation (must be a valid UUID)]:uuid:__claude_sessions'
     '--setting-sources[Comma-separated list of setting sources to load (user, project, local).]:sources:(user project local)'
     '--settings[Path to a settings JSON file or a JSON string to load additional settings from]:file-or-json:_files'
     '--strict-mcp-config[Only use MCP servers from --mcp-config, ignoring all other MCP configurations]'
     '--system-prompt[System prompt to use for the session]:prompt:'
     '--tmux[Create a tmux session for the worktree (requires --worktree). Uses iTerm2 native panes when available; use --tmux=classic for traditional tmux.]'
-    '*--tools[Specify the list of available tools from the built-in set. Use "" to disable all tools, "default" to use all tools, or specify tool names (e.g. "Bash,Edit,Read").]:tools:'
+    '*--tools[Specify the list of available tools from the built-in set. Use "" to disable all tools, "default" to use all tools, or specify tool names (e.g. "Bash,Edit,Read").]:tools:(Agent Bash Edit Glob Grep NotebookEdit Read Task TodoWrite WebFetch WebSearch Write)'
     '--verbose[Override verbose mode setting from config]'
     '(-v --version)'{-v,--version}'[Output the version number]'
     '(-w --worktree)'{-w,--worktree}'[Create a new git worktree for this session (optionally specify a name)]::name:'

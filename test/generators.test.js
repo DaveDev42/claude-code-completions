@@ -129,6 +129,37 @@ assert.doesNotMatch(vmZsh, /'\*\(--/, 'zsh must not combine * variadic marker wi
 assert.match(vmZsh, /'\*--allowedTools\[/, 'zsh should emit --allowedTools as its own variadic line');
 assert.match(vmZsh, /'\*--allowed-tools\[/, 'zsh should emit --allowed-tools as its own variadic line');
 
+// 5c. dynamic sources: --resume / --agent / --session-id must NOT be emitted
+//     as static enums. zsh references __claude_sessions/__claude_agents,
+//     bash shells out to `list-sessions`/`list-agents`, fish calls
+//     __claude_complete_sessions/__claude_complete_agents. Regression: if
+//     the generator falls back to `:value:` (empty action) the user sees
+//     no completion at all, defeating the whole point.
+const dynIR = {
+  version: 'dyn-1',
+  options: [
+    { flags: ['--agent'], arg: { name: 'agent', required: true, variadic: false, choices: null, dynamicSource: 'agents' }, description: 'Agent name' },
+    { flags: ['-r', '--resume'], arg: { name: 'value', required: false, variadic: false, choices: null, dynamicSource: 'sessions' }, description: 'Resume' },
+    { flags: ['--session-id'], arg: { name: 'uuid', required: true, variadic: false, choices: null, dynamicSource: 'sessions' }, description: 'Session id' },
+  ],
+  commands: [],
+};
+const dynZsh = generateZsh(dynIR);
+assert.match(dynZsh, /__claude_agents\(\)/, 'zsh must define __claude_agents helper');
+assert.match(dynZsh, /__claude_sessions\(\)/, 'zsh must define __claude_sessions helper');
+assert.match(dynZsh, /:agent:__claude_agents/, 'zsh --agent action must call __claude_agents');
+assert.match(dynZsh, /:value:__claude_sessions/, 'zsh --resume action must call __claude_sessions');
+assert.match(dynZsh, /:uuid:__claude_sessions/, 'zsh --session-id action must call __claude_sessions');
+const dynBash = generateBash(dynIR);
+assert.match(dynBash, /--agent\)\s*\n\s*COMPREPLY=.*list-agents/, 'bash --agent case must call list-agents');
+assert.match(dynBash, /--resume\)\s*\n\s*COMPREPLY=.*list-sessions/, 'bash --resume case must call list-sessions');
+assert.match(dynBash, /--session-id\)\s*\n\s*COMPREPLY=.*list-sessions/, 'bash --session-id case must call list-sessions');
+const dynFish = generateFish(dynIR);
+assert.match(dynFish, /function __claude_complete_agents/, 'fish must define __claude_complete_agents');
+assert.match(dynFish, /function __claude_complete_sessions/, 'fish must define __claude_complete_sessions');
+assert.match(dynFish, /-l agent .*-a "\(__claude_complete_agents\)"/, 'fish --agent must use agent completer');
+assert.match(dynFish, /-l resume .*-a "\(__claude_complete_sessions\)"/, 'fish --resume must use session completer');
+
 // 6. bash: round-trip + COMPREPLY structure
 const bash = generateBash(ir);
 assert.match(bash, /complete .*-F .*_claude/, 'bash script must register completion');

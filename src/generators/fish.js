@@ -8,6 +8,18 @@ export function generateFish(ir) {
   lines.push(`# Auto-generated from \`claude --help\` (version: ${ir.version})`);
   lines.push('# fish completion for claude');
   lines.push('');
+  // Helper functions for dynamic completion sources. fish reads
+  // "value\tdescription" lines natively when emitted by a completer.
+  lines.push('function __claude_complete_agents');
+  lines.push('  set -l bin (set -q CLAUDE_COMPLETIONS_BIN; and echo $CLAUDE_COMPLETIONS_BIN; or echo claude-code-completions)');
+  lines.push('  command $bin list-agents 2>/dev/null');
+  lines.push('end');
+  lines.push('');
+  lines.push('function __claude_complete_sessions');
+  lines.push('  set -l bin (set -q CLAUDE_COMPLETIONS_BIN; and echo $CLAUDE_COMPLETIONS_BIN; or echo claude-code-completions)');
+  lines.push('  command $bin list-sessions 2>/dev/null');
+  lines.push('end');
+  lines.push('');
 
   const commandNames = ir.commands.map(c => c.name);
   const subcommandCmds = Object.keys(subcommandOverrides).filter(k => !subcommandOverrides[k].aliasOf);
@@ -42,7 +54,12 @@ export function generateFish(ir) {
       if (long) parts.push('-l', long.slice(2));
       if (opt.arg) {
         parts.push('-r');
-        if (opt.arg.choices) {
+        if (opt.arg.dynamicSource === 'agents') {
+          // fish -a accepts a command substitution; first column is value.
+          parts.push('-a', `"(__claude_complete_agents)"`);
+        } else if (opt.arg.dynamicSource === 'sessions') {
+          parts.push('-a', `"(__claude_complete_sessions)"`);
+        } else if (opt.arg.choices) {
           parts.push('-a', `"${opt.arg.choices.join(' ')}"`);
         }
       }

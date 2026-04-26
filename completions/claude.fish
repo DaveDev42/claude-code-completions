@@ -1,6 +1,16 @@
 # Auto-generated from `claude --help` (version: 2.1.119 (Claude Code))
 # fish completion for claude
 
+function __claude_complete_agents
+  set -l bin (set -q CLAUDE_COMPLETIONS_BIN; and echo $CLAUDE_COMPLETIONS_BIN; or echo claude-code-completions)
+  command $bin list-agents 2>/dev/null
+end
+
+function __claude_complete_sessions
+  set -l bin (set -q CLAUDE_COMPLETIONS_BIN; and echo $CLAUDE_COMPLETIONS_BIN; or echo claude-code-completions)
+  command $bin list-sessions 2>/dev/null
+end
+
 complete -c claude -n "__fish_use_subcommand" -f
 complete -c claude -n "__fish_use_subcommand" -a "agents" -d 'Manage background and configured agents'
 complete -c claude -n "__fish_use_subcommand" -a "auth" -d 'Manage authentication'
@@ -14,11 +24,11 @@ complete -c claude -n "__fish_use_subcommand" -a "setup-token" -d 'Set up a long
 complete -c claude -n "__fish_use_subcommand" -a "update" -d 'Check for updates and install if available'
 complete -c claude -n "__fish_use_subcommand" -a "upgrade" -d 'Check for updates and install if available'
 complete -c claude -l add-dir -r -d 'Additional directories to allow tool access to'
-complete -c claude -l agent -r -d 'Agent for the current session. Overrides the \'agent\' setting.'
+complete -c claude -l agent -r -a "(__claude_complete_agents)" -d 'Agent for the current session. Overrides the \'agent\' setting.'
 complete -c claude -l agents -r -d 'JSON object defining custom agents (e.g. \'{"reviewer": {"description": "Reviews code", "prompt": "You are a code reviewer"}}\')'
 complete -c claude -l allow-dangerously-skip-permissions -d 'Enable bypassing all permission checks as an option, without it being enabled by default. Recommended only for sandboxes with no internet access.'
-complete -c claude -l allowedTools -r -d 'Comma or space-separated list of tool names to allow (e.g. "Bash(git *) Edit")'
-complete -c claude -l allowed-tools -r -d 'Comma or space-separated list of tool names to allow (e.g. "Bash(git *) Edit")'
+complete -c claude -l allowedTools -r -a "Agent Bash Edit Glob Grep NotebookEdit Read Task TodoWrite WebFetch WebSearch Write" -d 'Comma or space-separated list of tool names to allow (e.g. "Bash(git *) Edit")'
+complete -c claude -l allowed-tools -r -a "Agent Bash Edit Glob Grep NotebookEdit Read Task TodoWrite WebFetch WebSearch Write" -d 'Comma or space-separated list of tool names to allow (e.g. "Bash(git *) Edit")'
 complete -c claude -l append-system-prompt -r -d 'Append a system prompt to the default system prompt'
 complete -c claude -l bare -d 'Minimal mode: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and CLAUDE.md auto-discovery. Sets CLAUDE_CODE_SIMPLE=1. Anthropic auth is strictly ANTHROP'
 complete -c claude -l betas -r -d 'Beta headers to include in API requests (API key users only)'
@@ -29,8 +39,8 @@ complete -c claude -l dangerously-skip-permissions -d 'Bypass all permission che
 complete -c claude -s d -l debug -r -d 'Enable debug mode with optional category filtering (e.g., "api,hooks" or "!1p,!file")'
 complete -c claude -l debug-file -r -d 'Write debug logs to a specific file path (implicitly enables debug mode)'
 complete -c claude -l disable-slash-commands -d 'Disable all skills'
-complete -c claude -l disallowedTools -r -d 'Comma or space-separated list of tool names to deny (e.g. "Bash(git *) Edit")'
-complete -c claude -l disallowed-tools -r -d 'Comma or space-separated list of tool names to deny (e.g. "Bash(git *) Edit")'
+complete -c claude -l disallowedTools -r -a "Agent Bash Edit Glob Grep NotebookEdit Read Task TodoWrite WebFetch WebSearch Write" -d 'Comma or space-separated list of tool names to deny (e.g. "Bash(git *) Edit")'
+complete -c claude -l disallowed-tools -r -a "Agent Bash Edit Glob Grep NotebookEdit Read Task TodoWrite WebFetch WebSearch Write" -d 'Comma or space-separated list of tool names to deny (e.g. "Bash(git *) Edit")'
 complete -c claude -l effort -r -a "low medium high max" -d 'Effort level for the current session (low, medium, high, xhigh, max)'
 complete -c claude -l exclude-dynamic-system-prompt-sections -d 'Move per-machine sections (cwd, env info, memory paths, git status) from the system prompt into the first user message. Improves cross-user prompt-cache reuse. Only applies with the default system pro'
 complete -c claude -l fallback-model -r -a "sonnet opus haiku claude-sonnet-4-6 claude-opus-4-6 claude-haiku-4-5-20251001" -d 'Enable automatic fallback to specified model when default model is overloaded (only works with --print)'
@@ -56,14 +66,14 @@ complete -c claude -l plugin-dir -r -d 'Load plugins from a directory for this s
 complete -c claude -s p -l print -d 'Print response and exit (useful for pipes). Note: The workspace trust dialog is skipped when Claude is run with the -p mode. Only use this flag in directories you trust.'
 complete -c claude -l remote-control-session-name-prefix -r -d 'Prefix for auto-generated Remote Control session names (default: hostname)'
 complete -c claude -l replay-user-messages -d 'Re-emit user messages from stdin back on stdout for acknowledgment (only works with --input-format=stream-json and --output-format=stream-json)'
-complete -c claude -s r -l resume -r -d 'Resume a conversation by session ID, or open interactive picker with optional search term'
-complete -c claude -l session-id -r -d 'Use a specific session ID for the conversation (must be a valid UUID)'
+complete -c claude -s r -l resume -r -a "(__claude_complete_sessions)" -d 'Resume a conversation by session ID, or open interactive picker with optional search term'
+complete -c claude -l session-id -r -a "(__claude_complete_sessions)" -d 'Use a specific session ID for the conversation (must be a valid UUID)'
 complete -c claude -l setting-sources -r -a "user project local" -d 'Comma-separated list of setting sources to load (user, project, local).'
 complete -c claude -l settings -r -d 'Path to a settings JSON file or a JSON string to load additional settings from'
 complete -c claude -l strict-mcp-config -d 'Only use MCP servers from --mcp-config, ignoring all other MCP configurations'
 complete -c claude -l system-prompt -r -d 'System prompt to use for the session'
 complete -c claude -l tmux -d 'Create a tmux session for the worktree (requires --worktree). Uses iTerm2 native panes when available; use --tmux=classic for traditional tmux.'
-complete -c claude -l tools -r -d 'Specify the list of available tools from the built-in set. Use "" to disable all tools, "default" to use all tools, or specify tool names (e.g. "Bash,Edit,Read").'
+complete -c claude -l tools -r -a "Agent Bash Edit Glob Grep NotebookEdit Read Task TodoWrite WebFetch WebSearch Write" -d 'Specify the list of available tools from the built-in set. Use "" to disable all tools, "default" to use all tools, or specify tool names (e.g. "Bash,Edit,Read").'
 complete -c claude -l verbose -d 'Override verbose mode setting from config'
 complete -c claude -s v -l version -d 'Output the version number'
 complete -c claude -s w -l worktree -r -d 'Create a new git worktree for this session (optionally specify a name)'

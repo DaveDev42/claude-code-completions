@@ -4,7 +4,20 @@ import { subcommandOverrides } from '../overrides.js';
 export function generateBash(ir) {
   const allFlags = ir.options.flatMap(o => o.flags);
   const commandNames = ir.commands.map(c => c.name);
-  const enumFlags = ir.options.filter(o => o.arg && o.arg.choices);
+  const enumFlags = ir.options.filter(o => o.arg && o.arg.choices && !o.arg.dynamicSource);
+  const dynamicFlags = ir.options.filter(o => o.arg && o.arg.dynamicSource);
+
+  const dynamicCases = dynamicFlags
+    .flatMap(o => o.flags.map(f => ({ flag: f, source: o.arg.dynamicSource })))
+    .map(({ flag, source }) => {
+      const subcmd = source === 'agents' ? 'list-agents' : 'list-sessions';
+      // bash compgen can't surface descriptions; take only the first column.
+      return `    ${flag})
+      COMPREPLY=($(compgen -W "$(\${CLAUDE_COMPLETIONS_BIN:-claude-code-completions} ${subcmd} 2>/dev/null | cut -f1)" -- "$cur"))
+      return 0
+      ;;`;
+    })
+    .join('\n');
 
   const subcommandCases = Object.entries(subcommandOverrides)
     .filter(([, def]) => def.subcommands || def.positional)
@@ -50,8 +63,9 @@ _claude_completions() {
   local cur prev words cword
   _init_completion || return
 
-  # Previous word determines enum completion
+  # Previous word determines enum or dynamic completion
   case "$prev" in
+${dynamicCases}
 ${enumCases}
   esac
 

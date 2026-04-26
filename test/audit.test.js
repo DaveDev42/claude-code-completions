@@ -17,6 +17,9 @@ function makeIR({ options = [], commands = [] } = {}) {
       { flags: ['--output-format'], arg: { choices: ['text', 'json', 'stream-json'] } },
       { flags: ['--input-format'], arg: { choices: ['text', 'stream-json'] } },
       { flags: ['--setting-sources'], arg: null },
+      { flags: ['--tools'], arg: null },
+      { flags: ['--allowedTools', '--allowed-tools'], arg: null },
+      { flags: ['--disallowedTools', '--disallowed-tools'], arg: null },
     ],
     commands: [
       { name: 'mcp', aliases: [] },
@@ -65,6 +68,9 @@ function makeIR({ options = [], commands = [] } = {}) {
       { flags: ['--output-format'], arg: null },
       { flags: ['--input-format'], arg: null },
       { flags: ['--setting-sources'], arg: null },
+      { flags: ['--tools'], arg: null },
+      { flags: ['--allowedTools', '--allowed-tools'], arg: null },
+      { flags: ['--disallowedTools', '--disallowed-tools'], arg: null },
     ],
     commands: [],
   });

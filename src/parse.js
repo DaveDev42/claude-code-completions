@@ -10,7 +10,7 @@
 //   commands: [{ name: "mcp", aliases: [], description: "..." }]
 // }
 
-import { enumOverrides } from './overrides.js';
+import { enumOverrides, dynamicSources } from './overrides.js';
 
 export function parseHelp(helpText, version = 'unknown') {
   const options = parseOptionsSection(helpText);
@@ -101,7 +101,8 @@ function parseOptionEntry(entry) {
     const name = inner.replace(/\.\.\.$/, '');
     const primary = flags.find(f => f.startsWith('--')) || flags[0];
     const choices = enumOverrides[primary] || extractChoicesFromDescription(description);
-    arg = { name, required, variadic, choices };
+    const dynamicSource = flags.map(f => dynamicSources[f]).find(Boolean) || null;
+    arg = { name, required, variadic, choices, dynamicSource };
   }
 
   return { flags, arg, description: description.trim() };
