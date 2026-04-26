@@ -88,9 +88,18 @@ claude-code-completions prefetch
 # overrides, missing enum values, and drift. Exits non-zero on errors.
 claude-code-completions audit
 
+# Diagnose the install: claude on PATH, --help works, cache state, loader
+# files in expected locations, parser end-to-end. Exits non-zero on failures.
+claude-code-completions doctor
+
 # Dump parsed IR as JSON (useful for debugging)
 claude-code-completions parse
 ```
+
+If completions stop working, run `claude-code-completions doctor` first — it
+identifies whether `claude` is on `PATH`, whether the loader files are in the
+right place for your shell, and whether the parser still works on your
+installed `claude --help` output.
 
 ## Updating for new Claude Code versions
 
