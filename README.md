@@ -60,6 +60,15 @@ Two layers:
    doesn't expose (e.g. model names, subcommand options).
 
 Cache location: `${XDG_CACHE_HOME:-~/.cache}/claude-code-completions/`
+Cache files are named `_claude-<version>`, `claude.bash-<version>`, and
+`claude.fish-<version>`. Loaders prune cache entries for older versions on
+the next miss, so the cache directory stays one entry per shell.
+
+The pre-generated files in `completions/` (and their installed copies under
+`<brew prefix>/share/claude-code-completions/*.static`) are **fallback only** —
+used when the generator can't run (e.g. `claude` is not yet on `PATH` after a
+fresh install). On a normal machine the loader-generated cache is always
+preferred.
 
 ## CLI
 
@@ -70,22 +79,36 @@ claude-code-completions generate --shell zsh --out ./completions
 # Generate for all supported shells
 claude-code-completions generate --all --out ./completions
 
+# Pre-warm the runtime cache for the current claude version (all shells),
+# pruning entries for older versions. Run from cron / launchd / a hook to
+# eliminate first-tab latency after claude updates.
+claude-code-completions prefetch
+
 # Dump parsed IR as JSON (useful for debugging)
 claude-code-completions parse
 ```
 
 ## Updating for new Claude Code versions
 
-The pre-generated completions in `completions/` are refreshed automatically by
-CI when upstream Claude Code releases new versions. End users don't need to do
-anything — the loader regenerates on their machine using their installed
-version.
+End users don't need to do anything: the loader detects the installed
+`claude` version on every shell, regenerates the cache the first time it
+sees a new version, and prunes the previous version's entry. The cache key
+is the version string itself, so you can roll forward or back without
+clearing anything by hand.
 
-If you want to update manually:
+To eliminate the ~100ms first-tab latency right after `claude` updates,
+arrange for `claude-code-completions prefetch` to run after each update.
+A few options:
 
 ```sh
-claude update   # update claude to latest
-# next time you tab-complete claude, the loader regenerates the cache
+# Cron — daily check, no-op if claude version unchanged
+0 9 * * * /usr/local/bin/claude-code-completions prefetch >/dev/null 2>&1
+
+# Claude Code SessionStart hook (~/.claude/settings.json)
+# Runs in the background each time you open a session.
+{ "hooks": { "SessionStart": [{ "matcher": "",
+    "hooks": [{ "type": "command",
+      "command": "claude-code-completions prefetch >/dev/null 2>&1 &" }] }] } }
 ```
 
 ## Contributing

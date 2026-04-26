@@ -6,18 +6,40 @@
 //   claude-code-completions parse [--help-file FILE]   # prints IR as JSON
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, resolve, join } from 'node:path';
 import { parseHelp } from '../src/parse.js';
 import { generateZsh } from '../src/generators/zsh.js';
 import { generateBash } from '../src/generators/bash.js';
 import { generateFish } from '../src/generators/fish.js';
 
 const GENERATORS = {
-  zsh: { gen: generateZsh, filename: '_claude' },
-  bash: { gen: generateBash, filename: 'claude.bash' },
-  fish: { gen: generateFish, filename: 'claude.fish' },
+  zsh: { gen: generateZsh, filename: '_claude', cachePrefix: '_claude-' },
+  bash: { gen: generateBash, filename: 'claude.bash', cachePrefix: 'claude.bash-' },
+  fish: { gen: generateFish, filename: 'claude.fish', cachePrefix: 'claude.fish-' },
 };
+
+function defaultCacheDir() {
+  const xdg = process.env.XDG_CACHE_HOME;
+  return xdg ? join(xdg, 'claude-code-completions') : join(homedir(), '.cache', 'claude-code-completions');
+}
+
+function sanitizeVersion(raw) {
+  return (raw || 'unknown').replace(/[ ()/]/g, '');
+}
+
+function prune(cacheDir, prefix, keep) {
+  let entries;
+  try { entries = readdirSync(cacheDir); } catch { return 0; }
+  let removed = 0;
+  for (const name of entries) {
+    if (name.startsWith(prefix) && name !== keep) {
+      try { unlinkSync(join(cacheDir, name)); removed++; } catch {}
+    }
+  }
+  return removed;
+}
 
 function parseArgs(argv) {
   const args = { _: [] };
@@ -86,6 +108,25 @@ function cmdParse(opts) {
   process.stdout.write(JSON.stringify(ir, null, 2) + '\n');
 }
 
+function cmdPrefetch(opts) {
+  const help = getHelpText(opts);
+  const rawVersion = getVersion(opts);
+  const version = sanitizeVersion(rawVersion);
+  const ir = parseHelp(help, rawVersion);
+  const cacheDir = opts['cache-dir'] ? resolve(opts['cache-dir']) : defaultCacheDir();
+  mkdirSync(cacheDir, { recursive: true });
+
+  let wrote = 0;
+  let pruned = 0;
+  for (const [shell, g] of Object.entries(GENERATORS)) {
+    const cacheFile = join(cacheDir, `${g.cachePrefix}${version}`);
+    writeFileSync(cacheFile, g.gen(ir));
+    wrote++;
+    pruned += prune(cacheDir, g.cachePrefix, `${g.cachePrefix}${version}`);
+  }
+  console.error(`prefetched ${wrote} completions for ${rawVersion} in ${cacheDir} (pruned ${pruned} stale)`);
+}
+
 function cmdHelp() {
   console.log(`claude-code-completions - Generate shell completions for Claude Code CLI
 
@@ -93,6 +134,7 @@ Usage:
   claude-code-completions generate --shell <zsh|bash|fish> [--out DIR]
   claude-code-completions generate --all --out DIR
   claude-code-completions parse [--help-file FILE]
+  claude-code-completions prefetch [--cache-dir DIR]
 
 Options:
   --shell      Target shell (zsh, bash, fish). Default: zsh
@@ -100,6 +142,12 @@ Options:
   --out DIR    Output directory. If omitted, writes to stdout
   --help-file  Use a saved \`claude --help\` output file instead of running claude
   --version    Override version string (for testing)
+  --cache-dir  Override cache directory (default: \$XDG_CACHE_HOME/claude-code-completions)
+
+prefetch generates completions for all three shells into the runtime cache
+directory used by the shell loaders, then deletes older cache entries for
+versions no longer present. Run it from cron, launchd, or a SessionStart
+hook to remove first-tab latency after claude updates.
 `);
 }
 
@@ -109,6 +157,7 @@ const cmd = args._[0];
 switch (cmd) {
   case 'generate': cmdGenerate(args); break;
   case 'parse': cmdParse(args); break;
+  case 'prefetch': cmdPrefetch(args); break;
   case 'help':
   case undefined:
     cmdHelp();

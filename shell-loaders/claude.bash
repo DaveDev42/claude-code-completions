@@ -29,6 +29,14 @@ _claude_completions_loader() {
       static_file="$(dirname "${BASH_SOURCE[0]}")/../share/claude-code-completions/claude.bash.static"
       [[ -f "$static_file" ]] && cp "$static_file" "$cache_file"
     fi
+
+    # Prune stale caches from previous claude versions
+    local stale
+    shopt -s nullglob
+    for stale in "$cache_dir"/claude.bash-*; do
+      [[ "$stale" != "$cache_file" ]] && rm -f "$stale"
+    done
+    shopt -u nullglob
   fi
 
   [[ -f "$cache_file" ]] && source "$cache_file"
