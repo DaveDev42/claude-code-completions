@@ -96,38 +96,48 @@ export function generateZsh(ir) {
   lines.push(`# Auto-generated from \`claude --help\` (version: ${ir.version})`);
   lines.push('# Do not edit manually — regenerate via claude-code-completions.');
   lines.push('');
-  lines.push('local curcontext="$curcontext" state line ret=1');
-  lines.push('typeset -A opt_args');
+  // Wrap the body in `_claude()` so that the loader can `source` this file
+  // and then call `_claude "$@"` to drive completion. Without the wrapper,
+  // zsh's normal autoload would build the function for us, but the loader
+  // bypasses autoload by sourcing the cached file directly.
+  lines.push('_claude() {');
+  lines.push('  local curcontext="$curcontext" state line ret=1');
+  lines.push('  typeset -A opt_args');
   lines.push('');
-  lines.push('local -a commands');
-  lines.push('commands=(');
-  lines.push(ir.commands.map(formatCommand).join('\n'));
-  lines.push(')');
+  lines.push('  local -a commands');
+  lines.push('  commands=(');
+  lines.push(ir.commands.map(formatCommand).map(l => '  ' + l).join('\n'));
+  lines.push('  )');
   lines.push('');
-  lines.push('local -a global_opts');
-  lines.push('global_opts=(');
-  lines.push(ir.options.map(formatOption).join('\n'));
-  lines.push(')');
+  lines.push('  local -a global_opts');
+  lines.push('  global_opts=(');
+  lines.push(ir.options.map(formatOption).map(l => '  ' + l).join('\n'));
+  lines.push('  )');
   lines.push('');
-  lines.push('_arguments -C \\');
-  lines.push('  $global_opts \\');
-  lines.push("  '1: :->command' \\");
-  lines.push("  '*::arg:->args' && ret=0");
+  lines.push('  _arguments -C \\');
+  lines.push('    $global_opts \\');
+  lines.push("    '1: :->command' \\");
+  lines.push("    '*::arg:->args' && ret=0");
   lines.push('');
-  lines.push('case $state in');
-  lines.push('  command)');
-  lines.push("    _describe -t commands 'claude command' commands && ret=0");
-  lines.push('    ;;');
-  lines.push('  args)');
-  lines.push('    case $line[1] in');
-  lines.push(buildSubcommandCases());
-  lines.push('      *)');
-  lines.push('        _default && ret=0');
-  lines.push('        ;;');
-  lines.push('    esac');
-  lines.push('    ;;');
-  lines.push('esac');
+  lines.push('  case $state in');
+  lines.push('    command)');
+  lines.push("      _describe -t commands 'claude command' commands && ret=0");
+  lines.push('      ;;');
+  lines.push('    args)');
+  lines.push('      case $line[1] in');
+  lines.push(buildSubcommandCases().split('\n').map(l => l ? '  ' + l : l).join('\n'));
+  lines.push('        *)');
+  lines.push('          _default && ret=0');
+  lines.push('          ;;');
+  lines.push('      esac');
+  lines.push('      ;;');
+  lines.push('  esac');
   lines.push('');
-  lines.push('return ret');
+  lines.push('  return ret');
+  lines.push('}');
+  lines.push('');
+  // When zsh autoloads this file (no loader involved), make sure the
+  // function actually runs once for the initial completion request.
+  lines.push('_claude "$@"');
   return lines.join('\n') + '\n';
 }

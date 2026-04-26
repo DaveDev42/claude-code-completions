@@ -26,6 +26,13 @@ assert.match(zsh, /^#compdef claude/m, 'zsh script must start with #compdef');
 assert.match(zsh, /2\.1\.119/, 'zsh script should embed the version');
 assert.match(zsh, /_arguments/, 'zsh script should call _arguments');
 assert.match(zsh, /case \$state in/, 'zsh script should branch on state');
+// The body must be wrapped in `_claude()` so the runtime loader can
+// `source` and then call the function. v0.3.0 regression: emitting
+// top-level `_arguments` instead caused `command not found: _claude`
+// every shell when the loader's fast path sourced a cache without
+// triggering zsh's autoload mechanism.
+assert.match(zsh, /^_claude\(\) \{/m, 'zsh output must define a _claude function');
+assert.match(zsh, /^_claude "\$@"\s*$/m, 'zsh output must invoke _claude after the closing brace');
 for (const cmd of ir.commands) {
   assert.ok(zsh.includes(`'${cmd.name}:`), `zsh missing _describe entry for ${cmd.name}`);
 }
