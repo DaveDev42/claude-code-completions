@@ -62,8 +62,12 @@ XDG_CACHE_HOME=/tmp/xdg CLAUDE_COMPLETIONS_BIN="$PWD/bin/claude-code-completions
 - `claude-code-completions prefetch` 는 위 캐시 경로에 세 쉘 분 한 번에 써 두고
   옛 버전 항목을 prune 한다. cron / launchd / SessionStart hook 에서 호출해
   claude 업그레이드 직후 첫 탭 지연을 없애는 용도.
+- `claude-code-completions audit` 는 `src/overrides.js` 를 현재 `claude --help`
+  와 비교해 drift 를 잡는다 (orphan override, enum 값 누락 등). update.yml cron
+  이 매주 돌리고 결과를 PR 본문에 포함한다. 새 모델/permission-mode 가 추가되면
+  enum-missing 에러로 보임 → 사람이 `overrides.js` 를 갱신해야 함.
 - 이 repo 자체는 캐시를 사용하지 않음 — `completions/` 는 fallback 산출물 (loader가
   generator를 못 돌릴 때만 사용; 평소엔 항상 캐시가 우선). `.github/workflows/update.yml`
-  cron이 매일 06:00 UTC에 새 claude 버전으로 재생성해 PR 을 연다.
+  cron이 매주 월요일 06:00 UTC 에 새 claude 버전으로 재생성해 PR 을 연다.
 - Repo에 편집 금지 바이너리 결과물: `completions/` (생성물). 수정은 `src/` 또는
   `src/overrides.js` 에서.

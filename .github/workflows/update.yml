@@ -30,6 +30,18 @@ jobs:
           echo "claude_version=$VERSION" >> $GITHUB_OUTPUT
           echo "Detected: $VERSION"
 
+      - name: Audit overrides against latest --help
+        id: audit
+        run: |
+          set +e
+          out=$(node bin/claude-code-completions.js audit --no-exit)
+          echo "$out"
+          {
+            echo "report<<EOF"
+            echo "$out"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
       - name: Regenerate completions
         run: node bin/claude-code-completions.js generate --all --out completions
 
@@ -52,6 +64,13 @@ jobs:
             Automated refresh of pre-generated completions against the latest Claude Code release.
 
             Claude Code version: `${{ steps.version.outputs.claude_version }}`
+
+            <details><summary>overrides audit</summary>
+
+            ```
+            ${{ steps.audit.outputs.report }}
+            ```
+            </details>
           branch: auto/refresh-completions
           delete-branch: true
           add-paths: completions/
