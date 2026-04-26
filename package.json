@@ -7,7 +7,7 @@
   },
   "scripts": {
     "generate": "node bin/claude-code-completions.js generate --all --out completions",
-    "test": "node test/parse.test.js"
+    "test": "node test/parse.test.js && node test/generators.test.js"
   },
   "repository": {
     "type": "git",
