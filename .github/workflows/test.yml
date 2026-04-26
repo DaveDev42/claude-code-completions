@@ -13,8 +13,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Install zsh and fish for shell syntax checks
+        run: sudo apt-get update && sudo apt-get install -y zsh fish
       - run: npm test
       - name: Syntax-check pre-generated completions
         run: |
           zsh -n completions/_claude
           bash -n completions/claude.bash
+          fish -n completions/claude.fish
