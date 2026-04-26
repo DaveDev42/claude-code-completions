@@ -1,8 +1,8 @@
-# Auto-generated from `claude --help` (version: 2.1.104 (Claude Code))
+# Auto-generated from `claude --help` (version: 2.1.119 (Claude Code))
 # fish completion for claude
 
 complete -c claude -n "__fish_use_subcommand" -f
-complete -c claude -n "__fish_use_subcommand" -a "agents" -d 'List configured agents'
+complete -c claude -n "__fish_use_subcommand" -a "agents" -d 'Manage background and configured agents'
 complete -c claude -n "__fish_use_subcommand" -a "auth" -d 'Manage authentication'
 complete -c claude -n "__fish_use_subcommand" -a "auto-mode" -d 'Inspect auto mode classifier configuration'
 complete -c claude -n "__fish_use_subcommand" -a "doctor" -d 'Check the health of your Claude Code auto-updater. Note: The workspace trust dialog is skipped and stdio servers from .mcp.json are spawned for health checks. Only use this command in directories you trust.'
@@ -17,7 +17,7 @@ complete -c claude -l add-dir -r -d 'Additional directories to allow tool access
 complete -c claude -l agent -r -d 'Agent for the current session. Overrides the \'agent\' setting.'
 complete -c claude -l agents -r -d 'JSON object defining custom agents (e.g. \'{"reviewer": {"description": "Reviews code", "prompt": "You are a code reviewer"}}\')'
 complete -c claude -l allow-dangerously-skip-permissions -d 'Enable bypassing all permission checks as an option, without it being enabled by default. Recommended only for sandboxes with no internet access.'
-complete -c claude -l allowedTools -r -d 'Comma or space-separated list of tool names to allow (e.g. "Bash(git:*) Edit")'
+complete -c claude -l allowedTools -r -d 'Comma or space-separated list of tool names to allow (e.g. "Bash(git *) Edit")'
 complete -c claude -l append-system-prompt -r -d 'Append a system prompt to the default system prompt'
 complete -c claude -l bare -d 'Minimal mode: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and CLAUDE.md auto-discovery. Sets CLAUDE_CODE_SIMPLE=1. Anthropic auth is strictly ANTHROP'
 complete -c claude -l betas -r -d 'Beta headers to include in API requests (API key users only)'
@@ -28,8 +28,8 @@ complete -c claude -l dangerously-skip-permissions -d 'Bypass all permission che
 complete -c claude -s d -l debug -r -d 'Enable debug mode with optional category filtering (e.g., "api,hooks" or "!1p,!file")'
 complete -c claude -l debug-file -r -d 'Write debug logs to a specific file path (implicitly enables debug mode)'
 complete -c claude -l disable-slash-commands -d 'Disable all skills'
-complete -c claude -l disallowedTools -r -d 'Comma or space-separated list of tool names to deny (e.g. "Bash(git:*) Edit")'
-complete -c claude -l effort -r -a "low medium high max" -d 'Effort level for the current session (low, medium, high, max)'
+complete -c claude -l disallowedTools -r -d 'Comma or space-separated list of tool names to deny (e.g. "Bash(git *) Edit")'
+complete -c claude -l effort -r -a "low medium high max" -d 'Effort level for the current session (low, medium, high, xhigh, max)'
 complete -c claude -l exclude-dynamic-system-prompt-sections -d 'Move per-machine sections (cwd, env info, memory paths, git status) from the system prompt into the first user message. Improves cross-user prompt-cache reuse. Only applies with the default system pro'
 complete -c claude -l fallback-model -r -a "sonnet opus haiku claude-sonnet-4-6 claude-opus-4-6 claude-haiku-4-5-20251001" -d 'Enable automatic fallback to specified model when default model is overloaded (only works with --print)'
 complete -c claude -l file -r -d 'File resources to download at startup. Format: file_id:relative_path (e.g., --file file_abc:doc.txt file_def:img.png)'
@@ -45,7 +45,7 @@ complete -c claude -l max-budget-usd -r -d 'Maximum dollar amount to spend on AP
 complete -c claude -l mcp-config -r -d 'Load MCP servers from JSON files or strings (space-separated)'
 complete -c claude -l mcp-debug -d '[DEPRECATED. Use --debug instead] Enable MCP debug mode (shows MCP server errors)'
 complete -c claude -l model -r -a "sonnet opus haiku claude-sonnet-4-6 claude-opus-4-6 claude-haiku-4-5-20251001" -d 'Model for the current session. Provide an alias for the latest model (e.g. \'sonnet\' or \'opus\') or a model\'s full name (e.g. \'claude-sonnet-4-6\').'
-complete -c claude -s n -l name -r -d 'Set a display name for this session (shown in /resume and terminal title)'
+complete -c claude -s n -l name -r -d 'Set a display name for this session (shown in the prompt box, /resume picker, and terminal title)'
 complete -c claude -l no-chrome -d 'Disable Claude in Chrome integration'
 complete -c claude -l no-session-persistence -d 'Disable session persistence - sessions will not be saved to disk and cannot be resumed (only works with --print)'
 complete -c claude -l output-format -r -a "text json stream-json" -d 'Output format (only works with --print): "text" (default), "json" (single result), or "stream-json" (realtime streaming) (choices: "text", "json", "stream-json")'

@@ -1,5 +1,5 @@
 #compdef claude
-# Auto-generated from `claude --help` (version: 2.1.104 (Claude Code))
+# Auto-generated from `claude --help` (version: 2.1.119 (Claude Code))
 # Do not edit manually — regenerate via claude-code-completions.
 
 local curcontext="$curcontext" state line ret=1
@@ -7,7 +7,7 @@ typeset -A opt_args
 
 local -a commands
 commands=(
-  'agents:List configured agents'
+  'agents:Manage background and configured agents'
   'auth:Manage authentication'
   'auto-mode:Inspect auto mode classifier configuration'
   'doctor:Check the health of your Claude Code auto-updater. Note\: The workspace trust dialog is skipped and stdio servers from .mcp.json are spawned for health checks. Only use this command in directories you trust.'
@@ -26,7 +26,7 @@ global_opts=(
   '--agent[Agent for the current session. Overrides the '\''agent'\'' setting.]:agent:'
   '--agents[JSON object defining custom agents (e.g. '\''{"reviewer"\: {"description"\: "Reviews code", "prompt"\: "You are a code reviewer"}}'\'')]:json:'
   '--allow-dangerously-skip-permissions[Enable bypassing all permission checks as an option, without it being enabled by default. Recommended only for sandboxes with no internet access.]'
-  '*(--allowedTools --allowed-tools)'{--allowedTools,--allowed-tools}'[Comma or space-separated list of tool names to allow (e.g. "Bash(git\:*) Edit")]:tools:'
+  '*(--allowedTools --allowed-tools)'{--allowedTools,--allowed-tools}'[Comma or space-separated list of tool names to allow (e.g. "Bash(git *) Edit")]:tools:'
   '--append-system-prompt[Append a system prompt to the default system prompt]:prompt:'
   '--bare[Minimal mode\: skip hooks, LSP, plugin sync, attribution, auto-memory, background prefetches, keychain reads, and CLAUDE.md auto-discovery. Sets CLAUDE_CODE_SIMPLE=1. Anthropic auth is strictly ANTHROPIC_API_KEY or apiKeyHelper via --settings (OAuth and keychain are never read). 3P providers (Bedrock/Vertex/Foundry) use their own credentials. Skills still resolve via /skill-name. Explicitly provide context via\: --system-prompt\[-file\], --append-system-prompt\[-file\], --add-dir (CLAUDE.md dirs), --mcp-config, --settings, --agents, --plugin-dir.]'
   '*--betas[Beta headers to include in API requests (API key users only)]:betas:'
@@ -37,8 +37,8 @@ global_opts=(
   '(-d --debug)'{-d,--debug}'[Enable debug mode with optional category filtering (e.g., "api,hooks" or "!1p,!file")]::filter:'
   '--debug-file[Write debug logs to a specific file path (implicitly enables debug mode)]:path:_files'
   '--disable-slash-commands[Disable all skills]'
-  '*(--disallowedTools --disallowed-tools)'{--disallowedTools,--disallowed-tools}'[Comma or space-separated list of tool names to deny (e.g. "Bash(git\:*) Edit")]:tools:'
-  '--effort[Effort level for the current session (low, medium, high, max)]:level:(low medium high max)'
+  '*(--disallowedTools --disallowed-tools)'{--disallowedTools,--disallowed-tools}'[Comma or space-separated list of tool names to deny (e.g. "Bash(git *) Edit")]:tools:'
+  '--effort[Effort level for the current session (low, medium, high, xhigh, max)]:level:(low medium high max)'
   '--exclude-dynamic-system-prompt-sections[Move per-machine sections (cwd, env info, memory paths, git status) from the system prompt into the first user message. Improves cross-user prompt-cache reuse. Only applies with the default system prompt (ignored with --system-prompt). (default\: false)]'
   '--fallback-model[Enable automatic fallback to specified model when default model is overloaded (only works with --print)]:model:(sonnet opus haiku claude-sonnet-4-6 claude-opus-4-6 claude-haiku-4-5-20251001)'
   '*--file[File resources to download at startup. Format\: file_id\:relative_path (e.g., --file file_abc\:doc.txt file_def\:img.png)]:specs:'
@@ -54,7 +54,7 @@ global_opts=(
   '*--mcp-config[Load MCP servers from JSON files or strings (space-separated)]:configs:_files'
   '--mcp-debug[\[DEPRECATED. Use --debug instead\] Enable MCP debug mode (shows MCP server errors)]'
   '--model[Model for the current session. Provide an alias for the latest model (e.g. '\''sonnet'\'' or '\''opus'\'') or a model'\''s full name (e.g. '\''claude-sonnet-4-6'\'').]:model:(sonnet opus haiku claude-sonnet-4-6 claude-opus-4-6 claude-haiku-4-5-20251001)'
-  '(-n --name)'{-n,--name}'[Set a display name for this session (shown in /resume and terminal title)]:name:'
+  '(-n --name)'{-n,--name}'[Set a display name for this session (shown in the prompt box, /resume picker, and terminal title)]:name:'
   '--no-chrome[Disable Claude in Chrome integration]'
   '--no-session-persistence[Disable session persistence - sessions will not be saved to disk and cannot be resumed (only works with --print)]'
   '--output-format[Output format (only works with --print)\: "text" (default), "json" (single result), or "stream-json" (realtime streaming) (choices\: "text", "json", "stream-json")]:format:(text json stream-json)'
