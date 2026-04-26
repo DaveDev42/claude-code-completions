@@ -84,6 +84,10 @@ claude-code-completions generate --all --out ./completions
 # eliminate first-tab latency after claude updates.
 claude-code-completions prefetch
 
+# Audit src/overrides.js against the live `claude --help`. Reports orphan
+# overrides, missing enum values, and drift. Exits non-zero on errors.
+claude-code-completions audit
+
 # Dump parsed IR as JSON (useful for debugging)
 claude-code-completions parse
 ```

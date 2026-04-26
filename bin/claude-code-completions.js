@@ -13,6 +13,7 @@ import { parseHelp } from '../src/parse.js';
 import { generateZsh } from '../src/generators/zsh.js';
 import { generateBash } from '../src/generators/bash.js';
 import { generateFish } from '../src/generators/fish.js';
+import { auditOverrides, formatAuditReport } from '../src/audit.js';
 
 const GENERATORS = {
   zsh: { gen: generateZsh, filename: '_claude', cachePrefix: '_claude-' },
@@ -127,6 +128,15 @@ function cmdPrefetch(opts) {
   console.error(`prefetched ${wrote} completions for ${rawVersion} in ${cacheDir} (pruned ${pruned} stale)`);
 }
 
+function cmdAudit(opts) {
+  const help = getHelpText(opts);
+  const version = getVersion(opts);
+  const ir = parseHelp(help, version);
+  const report = auditOverrides(ir);
+  console.log(formatAuditReport(report));
+  if (!report.ok && !opts['no-exit']) process.exit(1);
+}
+
 function cmdHelp() {
   console.log(`claude-code-completions - Generate shell completions for Claude Code CLI
 
@@ -135,6 +145,7 @@ Usage:
   claude-code-completions generate --all --out DIR
   claude-code-completions parse [--help-file FILE]
   claude-code-completions prefetch [--cache-dir DIR]
+  claude-code-completions audit [--help-file FILE] [--no-exit]
 
 Options:
   --shell      Target shell (zsh, bash, fish). Default: zsh
@@ -158,6 +169,7 @@ switch (cmd) {
   case 'generate': cmdGenerate(args); break;
   case 'parse': cmdParse(args); break;
   case 'prefetch': cmdPrefetch(args); break;
+  case 'audit': cmdAudit(args); break;
   case 'help':
   case undefined:
     cmdHelp();
