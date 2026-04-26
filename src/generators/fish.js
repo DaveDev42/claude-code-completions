@@ -27,22 +27,28 @@ export function generateFish(ir) {
     }
   }
 
-  // Global options
+  // Global options. fish takes one long form per `complete` invocation, so
+  // when an option has multiple long aliases (e.g. --allowedTools and
+  // --allowed-tools), emit one line per alias sharing the same description
+  // and short form. Without this, alias variants don't tab-complete.
   for (const opt of ir.options) {
     const desc = fishEscape(opt.description).slice(0, 200);
     const short = opt.flags.find(f => /^-[^-]$/.test(f));
-    const long = opt.flags.find(f => /^--/.test(f));
-    const parts = ['complete', '-c', 'claude'];
-    if (short) parts.push('-s', short.slice(1));
-    if (long) parts.push('-l', long.slice(2));
-    if (opt.arg) {
-      parts.push('-r');
-      if (opt.arg.choices) {
-        parts.push('-a', `"${opt.arg.choices.join(' ')}"`);
+    const longs = opt.flags.filter(f => /^--/.test(f));
+    const longList = longs.length > 0 ? longs : [null];
+    for (const long of longList) {
+      const parts = ['complete', '-c', 'claude'];
+      if (short) parts.push('-s', short.slice(1));
+      if (long) parts.push('-l', long.slice(2));
+      if (opt.arg) {
+        parts.push('-r');
+        if (opt.arg.choices) {
+          parts.push('-a', `"${opt.arg.choices.join(' ')}"`);
+        }
       }
+      parts.push('-d', `'${desc}'`);
+      lines.push(parts.join(' '));
     }
-    parts.push('-d', `'${desc}'`);
-    lines.push(parts.join(' '));
   }
 
   // Subcommand-specific completions
