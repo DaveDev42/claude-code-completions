@@ -30,6 +30,13 @@ function __claude_completions_load
             set -l static_file (dirname (status filename))/../share/claude-code-completions/claude.fish.static
             test -f "$static_file"; and cp "$static_file" "$cache_file"
         end
+
+        # Prune stale caches from previous claude versions
+        for stale in $cache_dir/claude.fish-*
+            if test -f "$stale"; and test "$stale" != "$cache_file"
+                rm -f "$stale"
+            end
+        end
     end
 
     test -f "$cache_file"; and source "$cache_file"

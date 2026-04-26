@@ -34,6 +34,12 @@ _claude() {
       local static_file="${0:A:h}/../share/claude-code-completions/_claude.static"
       [[ -f "$static_file" ]] && cp "$static_file" "$cache_file"
     fi
+
+    # Prune stale caches from previous claude versions
+    local stale
+    for stale in "$cache_dir"/_claude-*(N); do
+      [[ "$stale" != "$cache_file" ]] && rm -f "$stale"
+    done
   fi
 
   # Source the cached completion. It defines _claude (same function name),
