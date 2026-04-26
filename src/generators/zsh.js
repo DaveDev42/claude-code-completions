@@ -37,7 +37,10 @@ function formatOption(opt) {
   const { flags, arg, description } = opt;
   const desc = zshEscape(description);
   const variadic = arg && arg.variadic ? '*' : '';
-  // Optional arg = arg spec used [..] → zsh "::" means optional
+  // Optional arg = arg spec used [..] → zsh "::" means optional.
+  // For dynamicSource optional args (e.g. --resume), the helper itself
+  // suppresses session listing when the current word starts with `-`, so
+  // zsh's option matcher picks up the slack. See __claude_sessions below.
   const optional = arg && !arg.required;
   let action = actionForFlag(flags, arg);
   if (optional && action) {
@@ -118,6 +121,9 @@ export function generateZsh(ir) {
   lines.push('}');
   lines.push('');
   lines.push('__claude_agents() {');
+  // If the user is starting a new flag (`-foo`), don't show our values; let
+  // _arguments fall through to the global option matcher so other flags appear.
+  lines.push('  [[ "${words[CURRENT]}" == -* ]] && return 1');
   lines.push('  local -a entries');
   lines.push("  entries=(${(f)\"$(__claude_run_source list-agents)\"})");
   lines.push('  local -a values');
@@ -136,6 +142,7 @@ export function generateZsh(ir) {
   lines.push('}');
   lines.push('');
   lines.push('__claude_sessions() {');
+  lines.push('  [[ "${words[CURRENT]}" == -* ]] && return 1');
   lines.push('  local -a entries');
   lines.push("  entries=(${(f)\"$(__claude_run_source list-sessions)\"})");
   lines.push('  local -a values');

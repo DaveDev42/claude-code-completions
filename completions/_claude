@@ -108,7 +108,7 @@ _claude() {
     '(-p --print)'{-p,--print}'[Print response and exit (useful for pipes). Note\: The workspace trust dialog is skipped when Claude is run with the -p mode. Only use this flag in directories you trust.]'
     '--remote-control-session-name-prefix[Prefix for auto-generated Remote Control session names (default\: hostname)]:prefix:'
     '--replay-user-messages[Re-emit user messages from stdin back on stdout for acknowledgment (only works with --input-format=stream-json and --output-format=stream-json)]'
-    '(-r --resume)'{-r,--resume}'[Resume a conversation by session ID, or open interactive picker with optional search term]::value:__claude_sessions'
+    '(-r --resume)'{-r,--resume}'[Resume a conversation by session ID, or open interactive picker with optional search term]:value:__claude_sessions'
     '--session-id[Use a specific session ID for the conversation (must be a valid UUID)]:uuid:__claude_sessions'
     '--setting-sources[Comma-separated list of setting sources to load (user, project, local).]:sources:(user project local)'
     '--settings[Path to a settings JSON file or a JSON string to load additional settings from]:file-or-json:_files'
