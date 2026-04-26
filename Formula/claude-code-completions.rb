@@ -1,8 +1,8 @@
 class ClaudeCodeCompletions < Formula
   desc "Shell completions for the Claude Code CLI (zsh, bash, fish)"
   homepage "https://github.com/DaveDev42/claude-code-completions"
-  url "https://github.com/DaveDev42/claude-code-completions/archive/refs/tags/v0.3.1.tar.gz"
-  sha256 "07a3842c66a6a0ce2f2bcf756b6ecccab3e398cf6df56e7379c4f6f3016b56b9"
+  url "https://github.com/DaveDev42/claude-code-completions/archive/refs/tags/v0.4.0.tar.gz"
+  sha256 "da1d9562da3270c9472a03e8358018d5592a01b775cc8b5ada88219324de3530"
   license "MIT"
   head "https://github.com/DaveDev42/claude-code-completions.git", branch: "main"
 
