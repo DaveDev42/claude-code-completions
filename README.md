@@ -2,9 +2,26 @@
 
 Shell completions for the [Claude Code](https://claude.ai/code) CLI.
 
-Supports **zsh**, **bash**, and **fish**. Completions are auto-generated from
-`claude --help` and regenerate on your machine whenever `claude` is updated, so
-you always get completions that match your installed version.
+Supports **zsh**, **bash**, and **fish**. Completions are auto-generated
+from `claude --help` on your machine and refresh the moment `claude`
+updates, so they always match your installed version — no separate package
+release required to track upstream changes.
+
+Why bother:
+- **Always in sync.** The completion is derived from `claude --help` at
+  the exact version you have installed. New flag added upstream → next
+  shell picks it up.
+- **Fast.** A path+mtime sentinel skips `claude --version` on warm shells
+  (≈40ms vs 1.16s on a cold cache).
+- **Self-diagnosing.** `claude-code-completions doctor` and `audit` make
+  failure modes legible instead of "tab just stopped working".
+
+## Requirements
+
+- Node.js ≥ 18 (used at runtime by the generator)
+- One of zsh / bash / fish
+- `claude` CLI on your `PATH` (without it, the loader falls back to a
+  pre-generated static completion shipped with the package)
 
 ## Install
 
@@ -15,10 +32,17 @@ brew tap DaveDev42/tap
 brew install claude-code-completions
 ```
 
-Then, depending on your shell:
+To upgrade later:
 
-**zsh** — completions directory is automatically picked up if your `$fpath`
-already includes Homebrew's `site-functions`. If not, add to `~/.zshrc`:
+```sh
+brew update && brew upgrade claude-code-completions
+```
+
+After first install, depending on your shell:
+
+**zsh** — completions directory is automatically picked up if your
+`$fpath` already includes Homebrew's `site-functions`. If not, add to
+`~/.zshrc`:
 
 ```sh
 fpath=("$(brew --prefix)/share/zsh/site-functions" $fpath)
@@ -31,7 +55,22 @@ autoload -Uz compinit && compinit
 source "$(brew --prefix)/etc/bash_completion.d/claude.bash"
 ```
 
-**fish** — works out of the box; Homebrew installs into `~/.config/fish/completions/`.
+**fish** — works out of the box; Homebrew installs into
+`~/.config/fish/completions/`.
+
+### Optional: `/upgrade-completion` slash command
+
+If you use Claude Code itself, you can wire up a slash command that
+refreshes completions on demand:
+
+```sh
+mkdir -p ~/.claude/commands
+ln -sf "$(brew --prefix)/share/claude-code-completions/slash-commands/upgrade-completion.md" \
+       ~/.claude/commands/upgrade-completion.md
+```
+
+Then in any Claude Code session, type `/upgrade-completion`. Claude will
+run `prefetch` for the current `claude` version and report any issues.
 
 ### Manual install
 
@@ -50,38 +89,53 @@ ln -s "$PWD/completions/claude.fish" ~/.config/fish/completions/claude.fish
 
 Two layers:
 
-1. **Thin loader** (installed into your shell's completion path) — on first use,
-   runs `claude --version` to detect the installed Claude Code version. If a
-   cached completion exists for that version, sources it. Otherwise, runs the
-   generator to produce a fresh one.
-2. **Generator** (`claude-code-completions` CLI) — parses `claude --help` into
-   a shell-agnostic intermediate representation, then emits shell-specific
-   completion code. Supplements with manual overrides for things `--help`
-   doesn't expose (e.g. model names, subcommand options).
+1. **Thin loader** (installed into your shell's completion path) — on
+   every shell start, checks a one-line sentinel at
+   `${XDG_CACHE_HOME:-~/.cache}/claude-code-completions/.claude-meta`
+   (format: `path<TAB>mtime<TAB>version`). If the recorded path and mtime
+   match the current `claude` binary, it sources the cached completion
+   without spawning any process. On mismatch (claude was upgraded,
+   reinstalled, or moved), it falls through to the slow path: run
+   `claude --version`, regenerate the cache, prune the previous version's
+   entry, refresh the sentinel.
+2. **Generator** (`claude-code-completions` CLI) — parses `claude --help`
+   into a shell-agnostic intermediate representation, then emits
+   shell-specific completion code. Supplements with manual overrides for
+   things `--help` doesn't expose (e.g. model names, MCP/plugin/auth
+   subcommands).
 
-Cache location: `${XDG_CACHE_HOME:-~/.cache}/claude-code-completions/`
-Cache files are named `_claude-<version>`, `claude.bash-<version>`, and
-`claude.fish-<version>`. Loaders prune cache entries for older versions on
-the next miss, so the cache directory stays one entry per shell.
+Cache layout under `${XDG_CACHE_HOME:-~/.cache}/claude-code-completions/`:
 
-The pre-generated files in `completions/` (and their installed copies under
-`<brew prefix>/share/claude-code-completions/*.static`) are **fallback only** —
-used when the generator can't run (e.g. `claude` is not yet on `PATH` after a
-fresh install). On a normal machine the loader-generated cache is always
-preferred.
+| File | Purpose |
+|---|---|
+| `_claude-<version>` | zsh completion for that exact `claude` version |
+| `claude.bash-<version>` | bash completion |
+| `claude.fish-<version>` | fish completion |
+| `.claude-meta` | Fast-path sentinel (`path<TAB>mtime<TAB>version`) |
+
+Loaders prune older `_claude-*`, `claude.bash-*`, `claude.fish-*` entries
+on the next slow-path miss, so the cache stays at most one entry per
+shell.
+
+The pre-generated files in `completions/` (and their installed copies
+under `<brew prefix>/share/claude-code-completions/*.static`) are
+**fallback only** — used when the generator can't run (e.g. `claude` is
+not yet on `PATH` after a fresh install). On a normal machine the
+loader-generated cache is always preferred.
 
 ## CLI
 
 ```sh
-# Generate for zsh, write to ./completions/_claude
+# Generate for one shell, write to ./completions/_claude
 claude-code-completions generate --shell zsh --out ./completions
 
 # Generate for all supported shells
 claude-code-completions generate --all --out ./completions
 
 # Pre-warm the runtime cache for the current claude version (all shells),
-# pruning entries for older versions. Run from cron / launchd / a hook to
-# eliminate first-tab latency after claude updates.
+# pruning entries for older versions. Run from cron / launchd / a hook /
+# the /upgrade-completion slash command to eliminate first-tab latency
+# right after claude updates.
 claude-code-completions prefetch
 
 # Audit src/overrides.js against the live `claude --help`. Reports orphan
@@ -89,46 +143,68 @@ claude-code-completions prefetch
 claude-code-completions audit
 
 # Diagnose the install: claude on PATH, --help works, cache state, loader
-# files in expected locations, parser end-to-end. Exits non-zero on failures.
+# files in expected locations, parser end-to-end. Exits non-zero on
+# failures.
 claude-code-completions doctor
 
 # Dump parsed IR as JSON (useful for debugging)
 claude-code-completions parse
 ```
 
-If completions stop working, run `claude-code-completions doctor` first — it
-identifies whether `claude` is on `PATH`, whether the loader files are in the
-right place for your shell, and whether the parser still works on your
-installed `claude --help` output.
+### Troubleshooting
 
-## Updating for new Claude Code versions
+If completions stop working, run `doctor` first:
 
-End users don't need to do anything: the loader detects the installed
-`claude` version on every shell, regenerates the cache the first time it
-sees a new version, and prunes the previous version's entry. The cache key
-is the version string itself, so you can roll forward or back without
-clearing anything by hand.
-
-To eliminate the ~100ms first-tab latency right after `claude` updates,
-arrange for `claude-code-completions prefetch` to run after each update.
-A few options:
-
-```sh
-# Cron — daily check, no-op if claude version unchanged
-0 9 * * * /usr/local/bin/claude-code-completions prefetch >/dev/null 2>&1
-
-# Claude Code SessionStart hook (~/.claude/settings.json)
-# Runs in the background each time you open a session.
-{ "hooks": { "SessionStart": [{ "matcher": "",
-    "hooks": [{ "type": "command",
-      "command": "claude-code-completions prefetch >/dev/null 2>&1 &" }] }] } }
 ```
+$ claude-code-completions doctor
+claude-code-completions doctor
+  [OK  ] claude binary: 2.1.119 (Claude Code)
+  [OK  ] claude --help: 73 lines
+  [OK  ] cache directory: ~/.cache/claude-code-completions (zsh=1)
+  [OK  ] zsh loader: /opt/homebrew/share/zsh/site-functions/_claude
+  [WARN] bash loader: not at /opt/homebrew/etc/bash_completion.d/claude.bash (ok if you don't use this shell)
+  [OK  ] fish loader: /opt/homebrew/share/fish/vendor_completions.d/claude.fish
+  [OK  ] parser: 52 options, 9 commands parsed
+
+6 ok, 1 warn, 0 fail
+```
+
+`doctor` exits non-zero on `FAIL` so it composes with shell scripts. If
+it reports an issue with overrides specifically, also run `audit` for
+the detailed list of orphan / missing / extra entries.
+
+## When does this need updating?
+
+Two distinct flows, and they should not be confused:
+
+1. **`claude` itself updates** (e.g. `claude` 2.1.119 → 2.1.120). The
+   loader handles this entirely on your machine — sentinel mismatch on
+   the next shell, regenerate, prune. No package release, no `brew
+   upgrade`, no internet.
+2. **This package itself updates** (parser fix, generator fix, new
+   feature). Use `brew upgrade claude-code-completions`. There's no
+   periodic cron pushing changes — releases happen when there are
+   actual code changes worth shipping.
+
+If you'd like to verify a refresh worked after a `claude` upgrade, run
+`/upgrade-completion` (Claude Code) or `claude-code-completions
+prefetch` (any shell).
 
 ## Contributing
 
 - To add support for a new shell, implement a generator in
-  `src/generators/<shell>.js` that takes the IR produced by `src/parse.js`.
-- To fix missing enum values or subcommand options, edit `src/overrides.js`.
+  `src/generators/<shell>.js` that takes the IR produced by
+  `src/parse.js`, and register it in `bin/claude-code-completions.js`'s
+  `GENERATORS` map.
+- To fix missing enum values or subcommand options, edit
+  `src/overrides.js`. The next `audit` run flags drift against
+  `claude --help`.
+- `npm test` runs four suites: parse, generators (round-trip + mutex +
+  escape + variadic), audit, and doctor smoke. Add cases there for any
+  IR shape the parser starts producing.
+
+CI runs the same `npm test` plus syntax-checks the pre-generated
+completions with `zsh -n`, `bash -n`, and `fish -n`.
 
 ## License
 
