@@ -58,20 +58,6 @@ source "$(brew --prefix)/etc/bash_completion.d/claude.bash"
 **fish** — works out of the box; Homebrew installs into
 `~/.config/fish/completions/`.
 
-### Optional: `/upgrade-completion` slash command
-
-If you use Claude Code itself, you can wire up a slash command that
-refreshes completions on demand:
-
-```sh
-mkdir -p ~/.claude/commands
-ln -sf "$(brew --prefix)/share/claude-code-completions/slash-commands/upgrade-completion.md" \
-       ~/.claude/commands/upgrade-completion.md
-```
-
-Then in any Claude Code session, type `/upgrade-completion`. Claude will
-run `prefetch` for the current `claude` version and report any issues.
-
 ### Manual install
 
 ```sh
@@ -187,8 +173,13 @@ Two distinct flows, and they should not be confused:
    actual code changes worth shipping.
 
 If you'd like to verify a refresh worked after a `claude` upgrade, run
-`/upgrade-completion` (Claude Code) or `claude-code-completions
-prefetch` (any shell).
+`claude-code-completions prefetch` in any shell.
+
+Contributors working in this repository can also use the project-scope
+`/upgrade-completion` slash command, defined in
+`.claude/commands/upgrade-completion.md`. Open this directory with
+Claude Code and the command will be available automatically — it runs
+`prefetch` and falls back to `doctor` on failure.
 
 ## Contributing
 

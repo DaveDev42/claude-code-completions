@@ -71,9 +71,10 @@ XDG_CACHE_HOME=/tmp/xdg CLAUDE_COMPLETIONS_BIN="$PWD/bin/claude-code-completions
 - Loader 의 fast path: `cache_dir/.claude-meta` 한 줄 (`path\tmtime\tversion`).
   claude 바이너리의 path+mtime 이 일치하면 `claude --version` spawn 없이 캐시
   바로 source. 측정: slow path 1.16s → fast path 0.043s.
-- `slash-commands/upgrade-completion.md` 는 사용자 측 `~/.claude/commands/` 에
-  심볼릭 링크 거는 용. brew formula 가 `pkgshare/slash-commands/` 에 install
-  하고 caveats 에 ln 명령 안내.
+- `.claude/commands/upgrade-completion.md` 는 이 repo 안에서만 동작하는
+  project-scope 슬래시 명령. 이 repo 에서 `claude` 를 실행하면 자동으로
+  `/upgrade-completion` 으로 호출 가능 (사용자 측 install 필요 없음).
+  내용은 prefetch 실행 + 실패 시 doctor 호출.
 - 이 repo 자체는 캐시를 사용하지 않음 — `completions/` 는 fallback 산출물 (loader가
   generator를 못 돌릴 때만 사용; 평소엔 항상 캐시가 우선). 옛날엔 매주 cron 으로
   refresh PR 을 만들었지만 v0.3.0 에서 제거 (재배포 동반 안 되면 사용자 영향 0,
