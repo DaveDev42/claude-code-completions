@@ -1,9 +1,12 @@
-// Loader regression tests. Three scenarios per shell:
+// Loader regression tests. Scenarios per shell:
 //   1. 0-byte cache file is treated as missing and regenerated.
 //   2. Generator that emits partial output then crashes does NOT leave a
 //      truncated cache at the destination — falls through to static fallback
 //      installed at the brew layout's <prefix>/share/claude-code-completions/.
-//   3. No leftover .tmp files after either scenario.
+//   3. 1-byte corrupt cache (e.g. a stray newline left over from a prior
+//      failed `echo > file` simulation) is treated as missing — `-s` alone
+//      lets it through, but the sentinel check rejects it.
+//   4. No leftover .tmp files after any scenario.
 //
 // Each scenario assembles a synthetic brew prefix layout in a tmpdir so the
 // loader's static-path resolution can be exercised end-to-end without
@@ -148,6 +151,30 @@ for (const shell of SHELLS) {
     assert.deepEqual(tmpLeftovers(cacheDir), [], `${shell.name}: no leftover .tmp files after crash fallback`);
     rmSync(dir, { recursive: true, force: true });
     rmSync(dirname(fakeGen), { recursive: true, force: true });
+    ran++;
+  }
+
+  // --- scenario 3: 1-byte corrupt cache regenerates ---
+  // Reproduces the v0.4.3 bug: a leftover 1-byte file (e.g. from `echo
+  // > cache` simulation, or a generator that wrote one newline before
+  // SIGKILL) passed `-s` and was sourced, leaving _claude undefined.
+  // With sentinel-based validation, the loader should reject it and
+  // regenerate.
+  {
+    const { dir, loader, cacheDir } = makePrefix(shell);
+    mkdirSync(cacheDir, { recursive: true });
+    const cacheFile = join(cacheDir, `${shell.cachePrefix}${sanitized}`);
+    writeFileSync(cacheFile, '\n');
+    assert.equal(statSync(cacheFile).size, 1);
+
+    sourceLoader(shell, { ...process.env, XDG_CACHE_HOME: dirname(cacheDir), CLAUDE_COMPLETIONS_BIN: cli }, `source ${loader}`);
+
+    const found = findCacheFile(cacheDir, shell.cachePrefix, sanitized);
+    assert.ok(found, `${shell.name}: cache file should exist after corrupt-cache regen`);
+    const size = statSync(found).size;
+    assert.ok(size > 100, `${shell.name}: cache file should be regenerated, not the 1-byte corrupt original (got ${size}B)`);
+    assert.deepEqual(tmpLeftovers(cacheDir), [], `${shell.name}: no leftover .tmp files after corrupt-cache regen`);
+    rmSync(dir, { recursive: true, force: true });
     ran++;
   }
 }

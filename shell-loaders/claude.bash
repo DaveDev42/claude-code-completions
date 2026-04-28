@@ -17,6 +17,17 @@ _claude_completions_loader() {
     fi
   }
 
+  # A cache file is considered usable only if its first line matches the
+  # generator's sentinel comment. Plain -s (size > 0) lets a stray 1-byte
+  # newline or partially-written file slip through, which then sources
+  # as garbage / nothing and silently breaks tab completion.
+  _claude_completions_cache_ok() {
+    [[ -s "$1" ]] || return 1
+    local first
+    IFS= read -r first < "$1" 2>/dev/null || return 1
+    [[ "$first" == "# Auto-generated"* ]]
+  }
+
   # Fast path: skip `claude --version` if claude binary path+mtime matches
   # the recorded sentinel (saves a process spawn per shell).
   if [[ -n "$claude_path" && -r "$meta_file" ]]; then
@@ -25,11 +36,12 @@ _claude_completions_loader() {
     IFS=$'\t' read -r meta_path meta_mtime meta_version < "$meta_file"
     if [[ "$meta_path" == "$claude_path" && "$meta_mtime" == "$mtime" && -n "$meta_version" ]]; then
       cache_file="$cache_dir/claude.bash-$meta_version"
-      # -s (not -f) so a 0-byte cache file from a prior failed generate
-      # falls through to the slow path and gets regenerated.
-      if [[ -s "$cache_file" ]]; then
+      # Sentinel-checked: 0-byte / 1-byte / partially-written caches fall
+      # through to regeneration instead of being sourced as garbage.
+      if _claude_completions_cache_ok "$cache_file"; then
         source "$cache_file"
         unset -f _claude_completions_mtime
+        unset -f _claude_completions_cache_ok
         return
       fi
     fi
@@ -39,8 +51,9 @@ _claude_completions_loader() {
   [[ -z "$version" ]] && version="unknown"
   cache_file="$cache_dir/claude.bash-$version"
 
-  # -s so a previously-cached 0-byte file is treated as missing.
-  if [[ ! -s "$cache_file" ]]; then
+  # Sentinel-checked: a 0-byte file, a 1-byte newline, or any partial
+  # write is treated as missing and regenerated.
+  if ! _claude_completions_cache_ok "$cache_file"; then
     local gen="${CLAUDE_COMPLETIONS_BIN:-}"
     if [[ -z "$gen" ]]; then
       for candidate in \
@@ -71,7 +84,10 @@ _claude_completions_loader() {
       rm -f "$tmp_file"
       [[ -f "$static_file" ]] && cp "$static_file" "$tmp_file"
     fi
-    if [[ -s "$tmp_file" ]]; then
+    # Sentinel-check the tmp before promoting: a generator that wrote a
+    # single byte before SIGKILL would pass `-s` but produce a cache
+    # file that fails to source.
+    if _claude_completions_cache_ok "$tmp_file"; then
       mv -f "$tmp_file" "$cache_file"
     else
       rm -f "$tmp_file"
@@ -92,8 +108,9 @@ _claude_completions_loader() {
     [[ -n "$mtime" ]] && printf '%s\t%s\t%s\n' "$claude_path" "$mtime" "$version" > "$meta_file"
   fi
 
-  [[ -s "$cache_file" ]] && source "$cache_file"
+  _claude_completions_cache_ok "$cache_file" && source "$cache_file"
   unset -f _claude_completions_mtime
+  unset -f _claude_completions_cache_ok
 }
 
 _claude_completions_loader
