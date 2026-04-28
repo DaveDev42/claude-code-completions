@@ -3,6 +3,11 @@
 # On first use (or when claude version changes), regenerates completion into cache.
 # Falls back to the static pre-generated completion shipped with the package.
 
+# Capture the loader's own path at SOURCE time, before _claude() is defined.
+# Inside the function body, $0 is the function name ("_claude"), not the
+# file path — `${(%):-%N}` is the zsh-blessed way to get the source file.
+typeset -g _CLAUDE_LOADER_DIR="${${(%):-%N}:A:h}"
+
 _claude() {
   local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/claude-code-completions"
   local meta_file="$cache_dir/.claude-meta"
@@ -57,18 +62,27 @@ _claude() {
     fi
 
     mkdir -p "$cache_dir"
-    local static_file="${0:A:h}/../share/claude-code-completions/_claude.static"
+    # zsh loader installs at <prefix>/share/zsh/site-functions/_claude;
+    # static fallback lives at <prefix>/share/claude-code-completions/.
+    # That's three directories up. Use $_CLAUDE_LOADER_DIR captured at
+    # source time — $0 inside the function is just the function name.
+    local static_file="$_CLAUDE_LOADER_DIR/../../../share/claude-code-completions/_claude.static"
     # Write to a temp file then atomically rename, so a partial / failed
-    # generate never leaves a 0-byte cache file sitting where the next
-    # shell would source it.
+    # generate never leaves a corrupt cache file sitting where the next
+    # shell would source it. We require BOTH a successful exit AND a
+    # non-empty file: a generator that crashes after writing some bytes
+    # (SIGKILL, broken pipe, etc.) would otherwise leave a syntactically
+    # broken file that passes `-s` and then fails to source.
     local tmp_file="$cache_file.$$.tmp"
+    local gen_ok=0
     if [[ -x "$gen" ]]; then
-      "$gen" generate --shell zsh > "$tmp_file" 2>/dev/null
+      "$gen" generate --shell zsh > "$tmp_file" 2>/dev/null && gen_ok=1
     fi
-    # If the generator failed, was missing, or produced nothing, fall back
-    # to the static shipped completion.
-    if [[ ! -s "$tmp_file" && -f "$static_file" ]]; then
-      cp "$static_file" "$tmp_file"
+    # If the generator failed, was missing, or produced nothing usable,
+    # fall back to the static shipped completion.
+    if [[ $gen_ok -eq 0 || ! -s "$tmp_file" ]]; then
+      rm -f "$tmp_file"
+      [[ -f "$static_file" ]] && cp "$static_file" "$tmp_file"
     fi
     if [[ -s "$tmp_file" ]]; then
       mv -f "$tmp_file" "$cache_file"

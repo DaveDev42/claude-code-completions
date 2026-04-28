@@ -53,15 +53,23 @@ _claude_completions_loader() {
 
     mkdir -p "$cache_dir"
     local static_file
-    static_file="$(dirname "${BASH_SOURCE[0]}")/../share/claude-code-completions/claude.bash.static"
-    # Write to temp + rename so a partial / failed generate never sits at
-    # the cache path as a 0-byte file.
+    # bash loader installs at <prefix>/etc/bash_completion.d/claude;
+    # static fallback at <prefix>/share/claude-code-completions/. That's
+    # two directories up + share, not just one — the previous path never
+    # resolved.
+    static_file="$(dirname "${BASH_SOURCE[0]}")/../../share/claude-code-completions/claude.bash.static"
+    # Write to temp + rename, requiring BOTH a successful exit AND
+    # non-empty output. A generator that crashes mid-write (SIGKILL,
+    # broken pipe) would otherwise leave a syntactically broken file
+    # that passes `-s` but breaks `source`.
     local tmp_file="$cache_file.$$.tmp"
+    local gen_ok=0
     if [[ -x "$gen" ]]; then
-      "$gen" generate --shell bash > "$tmp_file" 2>/dev/null
+      "$gen" generate --shell bash > "$tmp_file" 2>/dev/null && gen_ok=1
     fi
-    if [[ ! -s "$tmp_file" && -f "$static_file" ]]; then
-      cp "$static_file" "$tmp_file"
+    if [[ $gen_ok -eq 0 || ! -s "$tmp_file" ]]; then
+      rm -f "$tmp_file"
+      [[ -f "$static_file" ]] && cp "$static_file" "$tmp_file"
     fi
     if [[ -s "$tmp_file" ]]; then
       mv -f "$tmp_file" "$cache_file"

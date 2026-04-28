@@ -34,9 +34,11 @@ function __claude_completions_load
         end
     end
 
-    set -l version (command claude --version 2>/dev/null | string replace -a ' ' '' | string replace -a '/' '' | string replace -a '(' '' | string replace -a ')' '')
-    test -z "$version"; and set version "unknown"
-    set -l cache_file "$cache_dir/claude.fish-$version"
+    # fish reserves $version as a read-only special variable holding fish's
+    # own version (since fish 4.x), so use a distinct local name.
+    set -l claude_version (command claude --version 2>/dev/null | string replace -a ' ' '' | string replace -a '/' '' | string replace -a '(' '' | string replace -a ')' '')
+    test -z "$claude_version"; and set claude_version "unknown"
+    set -l cache_file "$cache_dir/claude.fish-$claude_version"
 
     # -s so a previously-cached 0-byte file is treated as missing.
     if not test -s "$cache_file"
@@ -51,15 +53,24 @@ function __claude_completions_load
         end
 
         mkdir -p "$cache_dir"
-        set -l static_file (dirname (status filename))/../share/claude-code-completions/claude.fish.static
-        # Write to temp + rename so a partial / failed generate never leaves
-        # a 0-byte cache file at the destination path.
+        # fish loader installs at <prefix>/share/fish/vendor_completions.d/claude.fish;
+        # static fallback at <prefix>/share/claude-code-completions/. Three
+        # directories up — the previous `../share` path never resolved.
+        set -l static_file (dirname (status filename))/../../../share/claude-code-completions/claude.fish.static
+        # Write to temp + rename, requiring BOTH a successful exit AND
+        # non-empty output. A generator that crashes mid-write (SIGKILL,
+        # broken pipe) would otherwise leave a corrupt file that passes
+        # `-s` but breaks `source`.
         set -l tmp_file "$cache_file.$fish_pid.tmp"
+        set -l gen_ok 0
         if test -x "$gen"
-            $gen generate --shell fish > "$tmp_file" 2>/dev/null
+            if $gen generate --shell fish > "$tmp_file" 2>/dev/null
+                set gen_ok 1
+            end
         end
-        if not test -s "$tmp_file"; and test -f "$static_file"
-            cp "$static_file" "$tmp_file"
+        if test $gen_ok -eq 0; or not test -s "$tmp_file"
+            rm -f "$tmp_file"
+            test -f "$static_file"; and cp "$static_file" "$tmp_file"
         end
         if test -s "$tmp_file"
             mv -f "$tmp_file" "$cache_file"
@@ -79,7 +90,7 @@ function __claude_completions_load
     if test -n "$claude_path"
         set -l mtime (__claude_completions_mtime "$claude_path")
         if test -n "$mtime"
-            printf '%s\t%s\t%s\n' "$claude_path" "$mtime" "$version" > "$meta_file"
+            printf '%s\t%s\t%s\n' "$claude_path" "$mtime" "$claude_version" > "$meta_file"
         end
     end
 
