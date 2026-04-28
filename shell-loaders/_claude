@@ -15,6 +15,20 @@ _claude() {
   claude_path="$(command -v claude 2>/dev/null)"
   local version cache_file
 
+  # A cache file is considered usable only if it starts with the zsh
+  # completion sentinel `#compdef claude`. -s (size > 0) alone passes a
+  # stray 1-byte newline or any partial / corrupt file, which would then
+  # source as nothing and leave _claude undefined ("command not found:
+  # _claude" on every tab). Matching the sentinel is fast (one read) and
+  # generator-format-stable (every shipped zsh completion must start with
+  # #compdef to be recognised by zsh's compinit at all).
+  _claude_cache_ok() {
+    [[ -s "$1" ]] || return 1
+    local first
+    IFS= read -r first < "$1" 2>/dev/null || return 1
+    [[ "$first" == "#compdef claude"* ]]
+  }
+
   # Fast path: if claude binary path+mtime matches a recorded sentinel, reuse
   # the cached completion without spawning `claude --version` (saves ~tens of
   # ms per shell). Falls through to the slow path on any mismatch.
@@ -29,11 +43,11 @@ _claude() {
     IFS=$'\t' read -r meta_path meta_mtime meta_version < "$meta_file"
     if [[ "$meta_path" == "$claude_path" && "$meta_mtime" == "$mtime" && -n "$meta_version" ]]; then
       cache_file="$cache_dir/_claude-$meta_version"
-      # -s (not -f) so a 0-byte cache from a prior failed generate falls
-      # through to the slow path and gets regenerated, instead of being
-      # sourced as an empty file (which leaves _claude undefined and
-      # produces "command not found: _claude" on every tab).
-      if [[ -s "$cache_file" ]]; then
+      # Sentinel-checked: a 0-byte file or a stray 1-byte newline (or any
+      # partial / corrupt write) falls through to the slow path and gets
+      # regenerated. Sourcing such a file would leave _claude undefined
+      # and produce "command not found: _claude" on every tab.
+      if _claude_cache_ok "$cache_file"; then
         unfunction _claude 2>/dev/null
         source "$cache_file"
         _claude "$@"
@@ -46,9 +60,11 @@ _claude() {
   [[ -z "$version" ]] && version="unknown"
   cache_file="$cache_dir/_claude-$version"
 
-  # -s (not -f) so a previously-cached 0-byte file is treated as missing
-  # and regenerated. Otherwise the loader would source it forever.
-  if [[ ! -s "$cache_file" ]]; then
+  # Sentinel-checked so a 0-byte file, a stray 1-byte newline, or any
+  # partially-written cache from a prior crash is treated as missing and
+  # regenerated. Plain `-s` would let a 1-byte file through and the
+  # loader would source garbage forever.
+  if ! _claude_cache_ok "$cache_file"; then
     # Locate the generator (installed alongside this loader by Homebrew)
     # Priority: $CLAUDE_COMPLETIONS_BIN env var, then common prefixes.
     local gen="${CLAUDE_COMPLETIONS_BIN:-}"
@@ -84,7 +100,10 @@ _claude() {
       rm -f "$tmp_file"
       [[ -f "$static_file" ]] && cp "$static_file" "$tmp_file"
     fi
-    if [[ -s "$tmp_file" ]]; then
+    # Sentinel-check the tmp before promoting: a generator that emitted
+    # a single byte before SIGKILL would pass `-s` but produce a cache
+    # file that fails to source.
+    if _claude_cache_ok "$tmp_file"; then
       mv -f "$tmp_file" "$cache_file"
     else
       rm -f "$tmp_file"
@@ -110,9 +129,9 @@ _claude() {
 
   # Source the cached completion. It defines _claude (same function name),
   # overriding this loader, so subsequent invocations skip the loader entirely.
-  # -s (not -f) so a 0-byte file falls through to _default instead of being
-  # sourced and leaving _claude undefined.
-  if [[ -s "$cache_file" ]]; then
+  # Sentinel-checked so a corrupt cache falls through to _default rather
+  # than being sourced and leaving _claude undefined.
+  if _claude_cache_ok "$cache_file"; then
     unfunction _claude 2>/dev/null
     source "$cache_file"
     _claude "$@"

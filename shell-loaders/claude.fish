@@ -9,6 +9,16 @@ function __claude_completions_mtime
     end
 end
 
+# A cache file is considered usable only if its first line matches the
+# generator's sentinel. Plain `-s` (size > 0) lets a stray 1-byte newline
+# or partial write through, which then sources as garbage / nothing and
+# silently breaks tab completion.
+function __claude_completions_cache_ok
+    test -s "$argv[1]"; or return 1
+    set -l first (head -n1 "$argv[1]" 2>/dev/null)
+    string match -q '# Auto-generated*' -- $first
+end
+
 function __claude_completions_load
     set -l cache_dir (string join / $XDG_CACHE_HOME claude-code-completions)
     if test -z "$XDG_CACHE_HOME"
@@ -25,9 +35,10 @@ function __claude_completions_load
         set -l fields (string split \t -- $line)
         if test (count $fields) -ge 3; and test "$fields[1]" = "$claude_path"; and test "$fields[2]" = "$mtime"; and test -n "$fields[3]"
             set -l cache_file "$cache_dir/claude.fish-$fields[3]"
-            # -s (not -f) so a 0-byte cache from a prior failed generate
-            # falls through to regeneration instead of being sourced empty.
-            if test -s "$cache_file"
+            # Sentinel-checked: 0-byte / 1-byte / partially-written caches
+            # fall through to regeneration instead of being sourced as
+            # garbage.
+            if __claude_completions_cache_ok "$cache_file"
                 source "$cache_file"
                 return
             end
@@ -40,8 +51,9 @@ function __claude_completions_load
     test -z "$claude_version"; and set claude_version "unknown"
     set -l cache_file "$cache_dir/claude.fish-$claude_version"
 
-    # -s so a previously-cached 0-byte file is treated as missing.
-    if not test -s "$cache_file"
+    # Sentinel-checked: a 0-byte file, a 1-byte newline, or any partial
+    # write is treated as missing and regenerated.
+    if not __claude_completions_cache_ok "$cache_file"
         set -l gen $CLAUDE_COMPLETIONS_BIN
         if test -z "$gen"
             for candidate in (brew --prefix 2>/dev/null)/bin/claude-code-completions /opt/homebrew/bin/claude-code-completions /usr/local/bin/claude-code-completions
@@ -72,7 +84,10 @@ function __claude_completions_load
             rm -f "$tmp_file"
             test -f "$static_file"; and cp "$static_file" "$tmp_file"
         end
-        if test -s "$tmp_file"
+        # Sentinel-check the tmp before promoting: a generator that
+        # wrote a single byte before SIGKILL would pass `-s` but produce
+        # a cache file that fails to source.
+        if __claude_completions_cache_ok "$tmp_file"
             mv -f "$tmp_file" "$cache_file"
         else
             rm -f "$tmp_file"
@@ -94,9 +109,10 @@ function __claude_completions_load
         end
     end
 
-    test -s "$cache_file"; and source "$cache_file"
+    __claude_completions_cache_ok "$cache_file"; and source "$cache_file"
 end
 
 __claude_completions_load
 functions -e __claude_completions_load
 functions -e __claude_completions_mtime
+functions -e __claude_completions_cache_ok
