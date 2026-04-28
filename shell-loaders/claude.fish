@@ -25,18 +25,23 @@ function __claude_completions_load
         set -l fields (string split \t -- $line)
         if test (count $fields) -ge 3; and test "$fields[1]" = "$claude_path"; and test "$fields[2]" = "$mtime"; and test -n "$fields[3]"
             set -l cache_file "$cache_dir/claude.fish-$fields[3]"
-            if test -f "$cache_file"
+            # -s (not -f) so a 0-byte cache from a prior failed generate
+            # falls through to regeneration instead of being sourced empty.
+            if test -s "$cache_file"
                 source "$cache_file"
                 return
             end
         end
     end
 
-    set -l version (command claude --version 2>/dev/null | string replace -a ' ' '' | string replace -a '/' '' | string replace -a '(' '' | string replace -a ')' '')
-    test -z "$version"; and set version "unknown"
-    set -l cache_file "$cache_dir/claude.fish-$version"
+    # fish reserves $version as a read-only special variable holding fish's
+    # own version (since fish 4.x), so use a distinct local name.
+    set -l claude_version (command claude --version 2>/dev/null | string replace -a ' ' '' | string replace -a '/' '' | string replace -a '(' '' | string replace -a ')' '')
+    test -z "$claude_version"; and set claude_version "unknown"
+    set -l cache_file "$cache_dir/claude.fish-$claude_version"
 
-    if not test -f "$cache_file"
+    # -s so a previously-cached 0-byte file is treated as missing.
+    if not test -s "$cache_file"
         set -l gen $CLAUDE_COMPLETIONS_BIN
         if test -z "$gen"
             for candidate in (brew --prefix 2>/dev/null)/bin/claude-code-completions /opt/homebrew/bin/claude-code-completions /usr/local/bin/claude-code-completions
@@ -48,12 +53,29 @@ function __claude_completions_load
         end
 
         mkdir -p "$cache_dir"
+        # fish loader installs at <prefix>/share/fish/vendor_completions.d/claude.fish;
+        # static fallback at <prefix>/share/claude-code-completions/. Three
+        # directories up — the previous `../share` path never resolved.
+        set -l static_file (dirname (status filename))/../../../share/claude-code-completions/claude.fish.static
+        # Write to temp + rename, requiring BOTH a successful exit AND
+        # non-empty output. A generator that crashes mid-write (SIGKILL,
+        # broken pipe) would otherwise leave a corrupt file that passes
+        # `-s` but breaks `source`.
+        set -l tmp_file "$cache_file.$fish_pid.tmp"
+        set -l gen_ok 0
         if test -x "$gen"
-            $gen generate --shell fish > "$cache_file" 2>/dev/null
+            if $gen generate --shell fish > "$tmp_file" 2>/dev/null
+                set gen_ok 1
+            end
         end
-        if not test -s "$cache_file"
-            set -l static_file (dirname (status filename))/../share/claude-code-completions/claude.fish.static
-            test -f "$static_file"; and cp "$static_file" "$cache_file"
+        if test $gen_ok -eq 0; or not test -s "$tmp_file"
+            rm -f "$tmp_file"
+            test -f "$static_file"; and cp "$static_file" "$tmp_file"
+        end
+        if test -s "$tmp_file"
+            mv -f "$tmp_file" "$cache_file"
+        else
+            rm -f "$tmp_file"
         end
 
         # Prune stale caches from previous claude versions
@@ -68,11 +90,11 @@ function __claude_completions_load
     if test -n "$claude_path"
         set -l mtime (__claude_completions_mtime "$claude_path")
         if test -n "$mtime"
-            printf '%s\t%s\t%s\n' "$claude_path" "$mtime" "$version" > "$meta_file"
+            printf '%s\t%s\t%s\n' "$claude_path" "$mtime" "$claude_version" > "$meta_file"
         end
     end
 
-    test -f "$cache_file"; and source "$cache_file"
+    test -s "$cache_file"; and source "$cache_file"
 end
 
 __claude_completions_load
