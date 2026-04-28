@@ -181,6 +181,27 @@ Contributors working in this repository can also use the project-scope
 Claude Code and the command will be available automatically — it runs
 `prefetch` and falls back to `doctor` on failure.
 
+## Releasing
+
+Releases are cut via `/release X.Y.Z` (project-scope slash command, defined
+in `.claude/commands/release.md`). It encodes the full sequence so the easy
+step to forget — syncing the tap repo — can't be skipped:
+
+1. Tag `vX.Y.Z` and push.
+2. Compute the GitHub-generated tarball's `sha256`.
+3. Bump `Formula/claude-code-completions.rb` in this repo (url + sha256),
+   commit `chore: bump Formula to vX.Y.Z`.
+4. Copy the updated formula into the tap repo at
+   `$(brew --repository)/Library/Taps/davedev42/homebrew-tap`, commit
+   `chore: bump claude-code-completions to vX.Y.Z`, push.
+5. `gh release create vX.Y.Z` with user-facing notes.
+6. Smoke test: `brew update && brew upgrade davedev42/tap/claude-code-completions`.
+
+Step 4 is **load-bearing** — `brew install claude-code-completions` resolves
+through the tap, not this repo's `Formula/`. Bumping only this repo leaves
+users on the previous version with no error. The slash command performs all
+six steps; running them by hand is fine but follow the same order.
+
 ## Contributing
 
 - To add support for a new shell, implement a generator in
