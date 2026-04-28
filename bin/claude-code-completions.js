@@ -6,7 +6,7 @@
 //   claude-code-completions parse [--help-file FILE]   # prints IR as JSON
 
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync, renameSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, resolve, join } from 'node:path';
 import { parseHelp } from '../src/parse.js';
@@ -123,7 +123,11 @@ function cmdPrefetch(opts) {
   let pruned = 0;
   for (const [shell, g] of Object.entries(GENERATORS)) {
     const cacheFile = join(cacheDir, `${g.cachePrefix}${version}`);
-    writeFileSync(cacheFile, g.gen(ir));
+    // Write then rename so a crash mid-write can't leave a 0-byte cache
+    // file that the shell loaders would source forever.
+    const tmp = `${cacheFile}.${process.pid}.tmp`;
+    writeFileSync(tmp, g.gen(ir));
+    renameSync(tmp, cacheFile);
     wrote++;
     pruned += prune(cacheDir, g.cachePrefix, `${g.cachePrefix}${version}`);
   }

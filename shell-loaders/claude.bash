@@ -25,7 +25,9 @@ _claude_completions_loader() {
     IFS=$'\t' read -r meta_path meta_mtime meta_version < "$meta_file"
     if [[ "$meta_path" == "$claude_path" && "$meta_mtime" == "$mtime" && -n "$meta_version" ]]; then
       cache_file="$cache_dir/claude.bash-$meta_version"
-      if [[ -f "$cache_file" ]]; then
+      # -s (not -f) so a 0-byte cache file from a prior failed generate
+      # falls through to the slow path and gets regenerated.
+      if [[ -s "$cache_file" ]]; then
         source "$cache_file"
         unset -f _claude_completions_mtime
         return
@@ -37,7 +39,8 @@ _claude_completions_loader() {
   [[ -z "$version" ]] && version="unknown"
   cache_file="$cache_dir/claude.bash-$version"
 
-  if [[ ! -f "$cache_file" ]]; then
+  # -s so a previously-cached 0-byte file is treated as missing.
+  if [[ ! -s "$cache_file" ]]; then
     local gen="${CLAUDE_COMPLETIONS_BIN:-}"
     if [[ -z "$gen" ]]; then
       for candidate in \
@@ -49,13 +52,21 @@ _claude_completions_loader() {
     fi
 
     mkdir -p "$cache_dir"
+    local static_file
+    static_file="$(dirname "${BASH_SOURCE[0]}")/../share/claude-code-completions/claude.bash.static"
+    # Write to temp + rename so a partial / failed generate never sits at
+    # the cache path as a 0-byte file.
+    local tmp_file="$cache_file.$$.tmp"
     if [[ -x "$gen" ]]; then
-      "$gen" generate --shell bash > "$cache_file" 2>/dev/null
+      "$gen" generate --shell bash > "$tmp_file" 2>/dev/null
     fi
-    if [[ ! -s "$cache_file" ]]; then
-      local static_file
-      static_file="$(dirname "${BASH_SOURCE[0]}")/../share/claude-code-completions/claude.bash.static"
-      [[ -f "$static_file" ]] && cp "$static_file" "$cache_file"
+    if [[ ! -s "$tmp_file" && -f "$static_file" ]]; then
+      cp "$static_file" "$tmp_file"
+    fi
+    if [[ -s "$tmp_file" ]]; then
+      mv -f "$tmp_file" "$cache_file"
+    else
+      rm -f "$tmp_file"
     fi
 
     # Prune stale caches from previous claude versions
@@ -73,7 +84,7 @@ _claude_completions_loader() {
     [[ -n "$mtime" ]] && printf '%s\t%s\t%s\n' "$claude_path" "$mtime" "$version" > "$meta_file"
   fi
 
-  [[ -f "$cache_file" ]] && source "$cache_file"
+  [[ -s "$cache_file" ]] && source "$cache_file"
   unset -f _claude_completions_mtime
 }
 

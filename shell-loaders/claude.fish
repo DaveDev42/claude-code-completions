@@ -25,7 +25,9 @@ function __claude_completions_load
         set -l fields (string split \t -- $line)
         if test (count $fields) -ge 3; and test "$fields[1]" = "$claude_path"; and test "$fields[2]" = "$mtime"; and test -n "$fields[3]"
             set -l cache_file "$cache_dir/claude.fish-$fields[3]"
-            if test -f "$cache_file"
+            # -s (not -f) so a 0-byte cache from a prior failed generate
+            # falls through to regeneration instead of being sourced empty.
+            if test -s "$cache_file"
                 source "$cache_file"
                 return
             end
@@ -36,7 +38,8 @@ function __claude_completions_load
     test -z "$version"; and set version "unknown"
     set -l cache_file "$cache_dir/claude.fish-$version"
 
-    if not test -f "$cache_file"
+    # -s so a previously-cached 0-byte file is treated as missing.
+    if not test -s "$cache_file"
         set -l gen $CLAUDE_COMPLETIONS_BIN
         if test -z "$gen"
             for candidate in (brew --prefix 2>/dev/null)/bin/claude-code-completions /opt/homebrew/bin/claude-code-completions /usr/local/bin/claude-code-completions
@@ -48,12 +51,20 @@ function __claude_completions_load
         end
 
         mkdir -p "$cache_dir"
+        set -l static_file (dirname (status filename))/../share/claude-code-completions/claude.fish.static
+        # Write to temp + rename so a partial / failed generate never leaves
+        # a 0-byte cache file at the destination path.
+        set -l tmp_file "$cache_file.$fish_pid.tmp"
         if test -x "$gen"
-            $gen generate --shell fish > "$cache_file" 2>/dev/null
+            $gen generate --shell fish > "$tmp_file" 2>/dev/null
         end
-        if not test -s "$cache_file"
-            set -l static_file (dirname (status filename))/../share/claude-code-completions/claude.fish.static
-            test -f "$static_file"; and cp "$static_file" "$cache_file"
+        if not test -s "$tmp_file"; and test -f "$static_file"
+            cp "$static_file" "$tmp_file"
+        end
+        if test -s "$tmp_file"
+            mv -f "$tmp_file" "$cache_file"
+        else
+            rm -f "$tmp_file"
         end
 
         # Prune stale caches from previous claude versions
@@ -72,7 +83,7 @@ function __claude_completions_load
         end
     end
 
-    test -f "$cache_file"; and source "$cache_file"
+    test -s "$cache_file"; and source "$cache_file"
 end
 
 __claude_completions_load

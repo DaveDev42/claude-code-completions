@@ -24,7 +24,11 @@ _claude() {
     IFS=$'\t' read -r meta_path meta_mtime meta_version < "$meta_file"
     if [[ "$meta_path" == "$claude_path" && "$meta_mtime" == "$mtime" && -n "$meta_version" ]]; then
       cache_file="$cache_dir/_claude-$meta_version"
-      if [[ -f "$cache_file" ]]; then
+      # -s (not -f) so a 0-byte cache from a prior failed generate falls
+      # through to the slow path and gets regenerated, instead of being
+      # sourced as an empty file (which leaves _claude undefined and
+      # produces "command not found: _claude" on every tab).
+      if [[ -s "$cache_file" ]]; then
         unfunction _claude 2>/dev/null
         source "$cache_file"
         _claude "$@"
@@ -37,7 +41,9 @@ _claude() {
   [[ -z "$version" ]] && version="unknown"
   cache_file="$cache_dir/_claude-$version"
 
-  if [[ ! -f "$cache_file" ]]; then
+  # -s (not -f) so a previously-cached 0-byte file is treated as missing
+  # and regenerated. Otherwise the loader would source it forever.
+  if [[ ! -s "$cache_file" ]]; then
     # Locate the generator (installed alongside this loader by Homebrew)
     # Priority: $CLAUDE_COMPLETIONS_BIN env var, then common prefixes.
     local gen="${CLAUDE_COMPLETIONS_BIN:-}"
@@ -51,15 +57,23 @@ _claude() {
     fi
 
     mkdir -p "$cache_dir"
+    local static_file="${0:A:h}/../share/claude-code-completions/_claude.static"
+    # Write to a temp file then atomically rename, so a partial / failed
+    # generate never leaves a 0-byte cache file sitting where the next
+    # shell would source it.
+    local tmp_file="$cache_file.$$.tmp"
     if [[ -x "$gen" ]]; then
-      "$gen" generate --shell zsh > "$cache_file" 2>/dev/null || {
-        # Fall back to the static shipped completion
-        local static_file="${0:A:h}/../share/claude-code-completions/_claude.static"
-        [[ -f "$static_file" ]] && cp "$static_file" "$cache_file"
-      }
+      "$gen" generate --shell zsh > "$tmp_file" 2>/dev/null
+    fi
+    # If the generator failed, was missing, or produced nothing, fall back
+    # to the static shipped completion.
+    if [[ ! -s "$tmp_file" && -f "$static_file" ]]; then
+      cp "$static_file" "$tmp_file"
+    fi
+    if [[ -s "$tmp_file" ]]; then
+      mv -f "$tmp_file" "$cache_file"
     else
-      local static_file="${0:A:h}/../share/claude-code-completions/_claude.static"
-      [[ -f "$static_file" ]] && cp "$static_file" "$cache_file"
+      rm -f "$tmp_file"
     fi
 
     # Prune stale caches from previous claude versions
@@ -82,7 +96,9 @@ _claude() {
 
   # Source the cached completion. It defines _claude (same function name),
   # overriding this loader, so subsequent invocations skip the loader entirely.
-  if [[ -f "$cache_file" ]]; then
+  # -s (not -f) so a 0-byte file falls through to _default instead of being
+  # sourced and leaving _claude undefined.
+  if [[ -s "$cache_file" ]]; then
     unfunction _claude 2>/dev/null
     source "$cache_file"
     _claude "$@"
