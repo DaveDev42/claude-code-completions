@@ -1,10 +1,25 @@
 // User-facing diagnostic for "tab completion isn't working" / "is this thing alive".
-// Each check returns { name, status: 'ok'|'warn'|'fail', detail }.
+// Each check returns { name, status: 'ok'|'warn'|'fail', detail, fix? }.
+// `fix` is a machine-readable hint for `doctor --fix` to act on.
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+
+// ANSI styling. Disabled when stdout isn't a TTY or NO_COLOR is set
+// (https://no-color.org). Kept inline so we keep the zero-dependency property.
+const COLOR = process.stdout.isTTY && !process.env.NO_COLOR;
+const c = {
+  reset: COLOR ? '\x1b[0m' : '',
+  bold: COLOR ? '\x1b[1m' : '',
+  dim: COLOR ? '\x1b[2m' : '',
+  red: COLOR ? '\x1b[31m' : '',
+  green: COLOR ? '\x1b[32m' : '',
+  yellow: COLOR ? '\x1b[33m' : '',
+  blue: COLOR ? '\x1b[34m' : '',
+  cyan: COLOR ? '\x1b[36m' : '',
+};
 
 // Run a shell command through the user's interactive init (so fpath/compinit/
 // completion plugins all run) and return stdout. Returns null on any failure.
@@ -50,13 +65,19 @@ function checkZshActivation(loaderPath) {
       return {
         name: 'zsh activation',
         status: 'fail',
-        detail: `${loaderDir} not in $fpath — add \`eval "$(brew shellenv)"\` to ~/.zshrc BEFORE compinit/zinit/oh-my-zsh init`,
+        detail: `${loaderDir} not in $fpath`,
+        hint: 'Add brew shellenv to ~/.zshrc BEFORE compinit / oh-my-zsh / zinit / prezto init.',
+        snippet: 'eval "$(brew shellenv)"',
+        fix: 'zshrc-shellenv',
       };
     }
     return {
       name: 'zsh activation',
       status: 'fail',
-      detail: `loader dir is in $fpath but compinit didn't register _claude — try \`rm -f ~/.zcompdump*\` and open a new shell`,
+      detail: `loader dir is in $fpath but compinit didn't register _claude`,
+      hint: 'Stale ~/.zcompdump. Clear it and open a new shell.',
+      snippet: 'rm -f ~/.zcompdump* && exec zsh',
+      fix: 'zcompdump',
     };
   }
   return {
@@ -83,7 +104,9 @@ function checkBashActivation(loaderPath) {
   return {
     name: 'bash activation',
     status: 'fail',
-    detail: `complete -p claude empty after sourcing loader — ensure bash-completion is installed and ~/.bashrc sources it`,
+    detail: `complete -p claude empty after sourcing loader`,
+    hint: 'Install bash-completion and ensure ~/.bashrc sources its init script.',
+    snippet: 'brew install bash-completion',
   };
 }
 
@@ -207,19 +230,141 @@ async function runChecks() {
   return out;
 }
 
+function statusBadge(status) {
+  switch (status) {
+    case 'ok':   return `${c.green}OK  ${c.reset}`;
+    case 'warn': return `${c.yellow}WARN${c.reset}`;
+    case 'fail': return `${c.red}FAIL${c.reset}`;
+    default:     return status;
+  }
+}
+
+function formatChecks(checks) {
+  const lines = [`${c.bold}claude-code-completions doctor${c.reset}`];
+  for (const ch of checks) {
+    lines.push(`  [${statusBadge(ch.status)}] ${c.bold}${ch.name}${c.reset}: ${ch.detail}`);
+    if (ch.hint) {
+      lines.push(`         ${c.dim}${ch.hint}${c.reset}`);
+    }
+    if (ch.snippet) {
+      // The snippet is meant to be copy-paste-runnable, so it must stay on its
+      // own line with no leading indent dressing that could be copied along.
+      lines.push(`         ${c.cyan}${ch.snippet}${c.reset}`);
+    }
+  }
+  return lines;
+}
+
 export async function doctor() {
   const checks = await runChecks();
-  const fails = checks.filter(c => c.status === 'fail').length;
-  const warns = checks.filter(c => c.status === 'warn').length;
-  const lines = ['claude-code-completions doctor'];
-  for (const c of checks) {
-    const icon = c.status === 'ok' ? 'OK  ' : c.status === 'warn' ? 'WARN' : 'FAIL';
-    lines.push(`  [${icon}] ${c.name}: ${c.detail}`);
-  }
+  const fails = checks.filter(ch => ch.status === 'fail').length;
+  const warns = checks.filter(ch => ch.status === 'warn').length;
+  const fixable = checks.some(ch => ch.fix);
+  const lines = formatChecks(checks);
   const summary = fails === 0 && warns === 0
-    ? 'all checks passed'
+    ? `${c.green}all checks passed${c.reset}`
     : `${checks.length - fails - warns} ok, ${warns} warn, ${fails} fail`;
   lines.push('');
   lines.push(summary);
-  return { text: lines.join('\n'), ok: fails === 0 };
+  if (fixable) {
+    lines.push('');
+    lines.push(`${c.dim}Some issues are auto-fixable. Run:${c.reset}`);
+    lines.push(`  ${c.cyan}claude-code-completions doctor --fix${c.reset}`);
+  }
+  return { text: lines.join('\n'), ok: fails === 0, checks };
+}
+
+// --- doctor --fix ---------------------------------------------------------
+// Idempotent repairs for the two most common failure modes:
+//   1. ~/.zshrc missing `eval "$(brew shellenv)"` (loader dir not in $fpath)
+//   2. stale ~/.zcompdump* (loader dir in $fpath but compinit didn't pick up)
+// We never modify shell init files without an explicit `--fix` invocation.
+
+function brewShellenvLine() {
+  // Resolve a concrete brew prefix when possible so the line works even before
+  // brew is on PATH. Falls back to the bare `brew shellenv` form, which works
+  // on any machine that has brew on PATH already.
+  let prefix = null;
+  try {
+    prefix = execFileSync('brew', ['--prefix'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {}
+  if (prefix) {
+    return `eval "$(${prefix}/bin/brew shellenv)"`;
+  }
+  return `eval "$(brew shellenv)"`;
+}
+
+function fixZshrcShellenv() {
+  const zshrc = join(homedir(), '.zshrc');
+  const line = brewShellenvLine();
+  let body = '';
+  try { body = readFileSync(zshrc, 'utf8'); } catch {}
+  // Idempotent: any existing `brew shellenv` line counts as already-fixed,
+  // even if the prefix differs (user may have set their own).
+  if (/eval\s+"\$\(.*brew\s+shellenv\)"/.test(body)) {
+    return { changed: false, detail: `${zshrc} already has a brew shellenv line` };
+  }
+  // Prepend so the line runs before any framework's compinit. A trailing
+  // newline keeps the rest of the file intact even if it was empty.
+  const banner = '# Added by claude-code-completions doctor --fix: brew completions need this BEFORE compinit.\n';
+  const next = banner + line + '\n' + (body.length && !body.startsWith('\n') ? '\n' : '') + body;
+  writeFileSync(zshrc, next);
+  return { changed: true, detail: `prepended brew shellenv to ${zshrc}` };
+}
+
+function fixZcompdump() {
+  const home = homedir();
+  let removed = 0;
+  let entries = [];
+  try { entries = readdirSync(home); } catch { return { changed: false, detail: 'could not read $HOME' }; }
+  for (const name of entries) {
+    if (name.startsWith('.zcompdump')) {
+      try { unlinkSync(join(home, name)); removed++; } catch {}
+    }
+  }
+  return {
+    changed: removed > 0,
+    detail: removed > 0 ? `removed ${removed} ~/.zcompdump* file(s)` : 'no ~/.zcompdump* files to remove',
+  };
+}
+
+export async function doctorFix() {
+  const r = await doctor();
+  const fixable = r.checks.filter(ch => ch.fix);
+  const lines = [`${c.bold}claude-code-completions doctor --fix${c.reset}`];
+
+  if (fixable.length === 0) {
+    lines.push('');
+    lines.push(`${c.green}nothing to fix.${c.reset}`);
+    return { text: lines.join('\n'), ok: true };
+  }
+
+  // Track whether we've already cleaned ~/.zcompdump so we don't do it twice
+  // when both `zshrc-shellenv` and `zcompdump` fixes are present.
+  let didCompdump = false;
+  for (const ch of fixable) {
+    if (ch.fix === 'zshrc-shellenv') {
+      const r = fixZshrcShellenv();
+      lines.push(`  [${r.changed ? c.green + 'FIXED' + c.reset : c.dim + 'SKIP ' + c.reset}] ${ch.name}: ${r.detail}`);
+      // Adding brew shellenv changes $fpath, so any cached .zcompdump is now
+      // stale and would prevent compinit from picking up _claude on next start.
+      // Always clean it as part of this fix, so a single `--fix` invocation
+      // is enough to actually make completion work.
+      if (r.changed && !didCompdump) {
+        const dump = fixZcompdump();
+        lines.push(`  [${dump.changed ? c.green + 'FIXED' + c.reset : c.dim + 'SKIP ' + c.reset}] zcompdump cleanup: ${dump.detail}`);
+        didCompdump = true;
+      }
+    } else if (ch.fix === 'zcompdump') {
+      if (didCompdump) continue;
+      const r = fixZcompdump();
+      lines.push(`  [${r.changed ? c.green + 'FIXED' + c.reset : c.dim + 'SKIP ' + c.reset}] zcompdump cleanup: ${r.detail}`);
+      didCompdump = true;
+    }
+  }
+
+  lines.push('');
+  lines.push(`${c.dim}Open a new shell to pick up the changes:${c.reset}`);
+  lines.push(`  ${c.cyan}exec zsh${c.reset}`);
+  return { text: lines.join('\n'), ok: true };
 }
