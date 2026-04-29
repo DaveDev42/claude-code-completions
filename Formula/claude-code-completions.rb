@@ -29,27 +29,12 @@ class ClaudeCodeCompletions < Formula
 
   def caveats
     <<~EOS
-      Shell completions are installed under #{HOMEBREW_PREFIX}. For tab completion
-      to actually activate, your shell must see those directories on its
-      completion path.
+      If tab completion isn't working, run:
+        claude-code-completions doctor --fix
 
-      zsh:
-        Ensure `eval "$(#{HOMEBREW_PREFIX}/bin/brew shellenv)"` runs in ~/.zshrc
-        BEFORE `compinit` (and BEFORE zinit / oh-my-zsh / prezto / antidote
-        init, since those call compinit themselves). After installing, run:
-          rm -f ~/.zcompdump* && exec zsh
-
-      bash:
-        Requires the `bash-completion` formula. Then ensure your ~/.bashrc
-        sources its init script (Homebrew prints instructions on
-        `brew install bash-completion`).
-
-      fish:
-        Works out of the box once `eval "$(#{HOMEBREW_PREFIX}/bin/brew shellenv)"`
-        is in ~/.config/fish/config.fish.
-
-      Verify everything is wired up:
-        claude-code-completions doctor
+      That auto-fixes the common zsh setup issues (brew shellenv missing from
+      ~/.zshrc, stale ~/.zcompdump). For bash, also `brew install bash-completion`
+      and source its init from ~/.bashrc. fish works out of the box.
     EOS
   end
 

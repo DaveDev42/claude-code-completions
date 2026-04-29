@@ -14,7 +14,7 @@ import { generateZsh } from '../src/generators/zsh.js';
 import { generateBash } from '../src/generators/bash.js';
 import { generateFish } from '../src/generators/fish.js';
 import { auditOverrides, formatAuditReport } from '../src/audit.js';
-import { doctor } from '../src/doctor.js';
+import { doctor, doctorFix } from '../src/doctor.js';
 import { listAgents, listSessions } from '../src/sources.js';
 
 const GENERATORS = {
@@ -151,7 +151,13 @@ function cmdListSessions() {
   for (const line of listSessions()) process.stdout.write(line + '\n');
 }
 
-async function cmdDoctor() {
+async function cmdDoctor(opts) {
+  if (opts && opts.fix) {
+    const r = await doctorFix();
+    console.log(r.text);
+    if (!r.ok) process.exit(1);
+    return;
+  }
   const r = await doctor();
   console.log(r.text);
   if (!r.ok) process.exit(1);
@@ -166,7 +172,7 @@ Usage:
   claude-code-completions parse [--help-file FILE]
   claude-code-completions prefetch [--cache-dir DIR]
   claude-code-completions audit [--help-file FILE] [--no-exit]
-  claude-code-completions doctor
+  claude-code-completions doctor [--fix]
   claude-code-completions list-agents
   claude-code-completions list-sessions
 
@@ -177,6 +183,7 @@ Options:
   --help-file  Use a saved \`claude --help\` output file instead of running claude
   --version    Override version string (for testing)
   --cache-dir  Override cache directory (default: \$XDG_CACHE_HOME/claude-code-completions)
+  --fix        With \`doctor\`: idempotently repair common zsh setup issues
 
 prefetch generates completions for all three shells into the runtime cache
 directory used by the shell loaders, then deletes older cache entries for
@@ -193,7 +200,7 @@ switch (cmd) {
   case 'parse': cmdParse(args); break;
   case 'prefetch': cmdPrefetch(args); break;
   case 'audit': cmdAudit(args); break;
-  case 'doctor': cmdDoctor(); break;
+  case 'doctor': cmdDoctor(args); break;
   case 'list-agents': cmdListAgents(); break;
   case 'list-sessions': cmdListSessions(); break;
   case 'help':
