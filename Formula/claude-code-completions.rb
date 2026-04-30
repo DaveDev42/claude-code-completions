@@ -68,12 +68,17 @@ class ClaudeCodeCompletions < Formula
 
   def caveats
     <<~EOS
-      If tab completion isn't working, run:
+      Shell setup (one-time):
+        zsh  — nothing extra; completions load automatically.
+        bash — install bash-completion (`brew install bash-completion`) and
+               add its init line to ~/.bashrc if you haven't already.
+        fish — nothing extra; completions load automatically.
+
+      To verify everything is wired up correctly, or to auto-fix common issues:
         claude-code-completions doctor --fix
 
-      That auto-fixes the common zsh setup issues (brew shellenv missing from
-      ~/.zshrc, stale ~/.zcompdump). For bash, also `brew install bash-completion`
-      and source its init from ~/.bashrc. fish works out of the box.
+      To warm the completion cache before the first `claude <Tab>`:
+        claude-code-completions prefetch
     EOS
   end
 
