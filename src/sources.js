@@ -83,7 +83,11 @@ export function listSessions(cwd = process.cwd()) {
   }
   files.sort((a, b) => b.mtime - a.mtime);
 
-  const liveNames = liveSessionNames();
+  // Restrict live-name lookup to sessions that actually have a jsonl in this
+  // cwd, so a stale pid.json from a crashed session in some other project
+  // can't surface a name here.
+  const known = new Set(files.map(f => f.uuid));
+  const liveNames = liveSessionNames(known);
   return files.map(({ uuid, path }, i) => {
     const scan = i < SUMMARY_LIMIT ? scanJsonl(path) : { summary: '', slug: '' };
     // sanitize value too: a `--name "foo\tbar"` or a corrupted slug would
@@ -94,10 +98,11 @@ export function listSessions(cwd = process.cwd()) {
 }
 
 // Active sessions write {pid}.json with {sessionId, name?} while running.
-// `name` is the user-set --name (or rename via /name). After exit the file
-// is removed, so this only surfaces names for live sessions — slugs in the
-// jsonl cover the rest.
-function liveSessionNames() {
+// `name` is the user-set --name (or rename via /name). The file is normally
+// removed at exit, but a crashed claude can leave one behind — we filter
+// those out by checking the pid is still alive (kill 0) and by intersecting
+// with the caller's known sessionIds.
+function liveSessionNames(known) {
   const out = new Map();
   const dir = join(homedir(), '.claude', 'sessions');
   let entries;
@@ -106,11 +111,19 @@ function liveSessionNames() {
     if (!name.endsWith('.json')) continue;
     let obj;
     try { obj = JSON.parse(readFileSync(join(dir, name), 'utf8')); } catch { continue; }
-    if (obj && typeof obj.sessionId === 'string' && typeof obj.name === 'string' && obj.name) {
-      out.set(obj.sessionId, obj.name);
-    }
+    if (!obj || typeof obj.sessionId !== 'string' || typeof obj.name !== 'string' || !obj.name) continue;
+    if (!known.has(obj.sessionId)) continue;
+    if (typeof obj.pid === 'number' && !pidAlive(obj.pid)) continue;
+    out.set(obj.sessionId, obj.name);
   }
   return out;
+}
+
+// kill(pid, 0): no signal, just permission/existence check. Returns true if
+// the process is alive (or alive-but-not-ours, which still proves existence).
+function pidAlive(pid) {
+  try { process.kill(pid, 0); return true; }
+  catch (e) { return e.code === 'EPERM'; }
 }
 
 // Single pass over the first SCAN_BYTES of the jsonl. Picks up:
