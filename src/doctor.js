@@ -101,12 +101,18 @@ function checkBashActivation(loaderPath) {
   if (line && line !== 'MISSING' && line.includes('claude')) {
     return { name: 'bash activation', status: 'ok', detail: line.split('\n').pop() };
   }
+  // Only offer --fix on macOS where we can use brew. Linux requires distro-
+  // specific package management, so we skip the automated path there.
+  const isMac = process.platform === 'darwin';
   return {
     name: 'bash activation',
     status: 'fail',
     detail: `complete -p claude empty after sourcing loader`,
-    hint: 'Install bash-completion and ensure ~/.bashrc sources its init script.',
-    snippet: 'brew install bash-completion',
+    hint: isMac
+      ? 'Install bash-completion and ensure ~/.bashrc sources its init script.'
+      : 'Install bash-completion for your distro and ensure ~/.bashrc sources its init script.',
+    snippet: isMac ? 'brew install bash-completion' : undefined,
+    fix: isMac ? 'bash-setup' : undefined,
   };
 }
 
@@ -328,6 +334,68 @@ function fixZcompdump() {
   };
 }
 
+// Returns true if bash-completion (either version) is installed via brew.
+function brewBashCompletionInstalled() {
+  try {
+    execFileSync('brew', ['list', '--formula', 'bash-completion'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return true;
+  } catch {}
+  try {
+    execFileSync('brew', ['list', '--formula', 'bash-completion@2'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return true;
+  } catch {}
+  return false;
+}
+
+function fixBashCompletion() {
+  if (brewBashCompletionInstalled()) {
+    return { changed: false, detail: 'bash-completion already installed' };
+  }
+  try {
+    execFileSync('brew', ['install', 'bash-completion'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 120000,
+    });
+    return { changed: true, detail: 'installed bash-completion via brew' };
+  } catch (e) {
+    return { changed: false, error: true, detail: `brew install bash-completion failed: ${e.message.split('\n')[0]}` };
+  }
+}
+
+function fixBashrc() {
+  // Brew uses the same init script path for both bash-completion versions.
+  let prefix = null;
+  try {
+    prefix = execFileSync('brew', ['--prefix'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  } catch {}
+  if (!prefix) return { changed: false, detail: 'brew not found; cannot determine init script path' };
+
+  const initScript = join(prefix, 'etc/profile.d/bash_completion.sh');
+  // The canonical line that Homebrew caveats recommend.
+  const sourceLine = `[[ -r "${initScript}" ]] && . "${initScript}"`;
+
+  // Check ~/.bashrc and ~/.bash_profile; if either already has it, skip.
+  const targets = [join(homedir(), '.bashrc'), join(homedir(), '.bash_profile')];
+  for (const f of targets) {
+    let body = '';
+    try { body = readFileSync(f, 'utf8'); } catch {}
+    if (body.includes('bash_completion.sh')) {
+      return { changed: false, detail: `${f} already sources bash_completion.sh` };
+    }
+  }
+
+  // Write to ~/.bashrc (bash -i picks this up for non-login shells; same
+  // path the doctor uses when running `bash -i` for activation checks).
+  const bashrc = join(homedir(), '.bashrc');
+  let body = '';
+  try { body = readFileSync(bashrc, 'utf8'); } catch {}
+  const banner = '# Added by claude-code-completions doctor --fix: enables bash-completion.\n';
+  const next = body + (body.endsWith('\n') || body === '' ? '' : '\n') + '\n' + banner + sourceLine + '\n';
+  writeFileSync(bashrc, next);
+  return { changed: true, detail: `appended bash-completion source line to ${bashrc}` };
+}
+
 export async function doctorFix() {
   const r = await doctor();
   const fixable = r.checks.filter(ch => ch.fix);
@@ -342,6 +410,7 @@ export async function doctorFix() {
   // Track whether we've already cleaned ~/.zcompdump so we don't do it twice
   // when both `zshrc-shellenv` and `zcompdump` fixes are present.
   let didCompdump = false;
+  const fixedShells = new Set();
   for (const ch of fixable) {
     if (ch.fix === 'zshrc-shellenv') {
       const r = fixZshrcShellenv();
@@ -355,16 +424,34 @@ export async function doctorFix() {
         lines.push(`  [${dump.changed ? c.green + 'FIXED' + c.reset : c.dim + 'SKIP ' + c.reset}] zcompdump cleanup: ${dump.detail}`);
         didCompdump = true;
       }
+      fixedShells.add('zsh');
     } else if (ch.fix === 'zcompdump') {
       if (didCompdump) continue;
       const r = fixZcompdump();
       lines.push(`  [${r.changed ? c.green + 'FIXED' + c.reset : c.dim + 'SKIP ' + c.reset}] zcompdump cleanup: ${r.detail}`);
       didCompdump = true;
+      fixedShells.add('zsh');
+    } else if (ch.fix === 'bash-setup') {
+      const pkg = fixBashCompletion();
+      const badge = pkg.error ? c.red + 'ERR ' + c.reset : pkg.changed ? c.green + 'FIXED' + c.reset : c.dim + 'SKIP ' + c.reset;
+      lines.push(`  [${badge}] ${ch.name} (bash-completion): ${pkg.detail}`);
+      if (!pkg.error) {
+        const rc = fixBashrc();
+        const rcBadge = rc.changed ? c.green + 'FIXED' + c.reset : c.dim + 'SKIP ' + c.reset;
+        lines.push(`  [${rcBadge}] ${ch.name} (~/.bashrc): ${rc.detail}`);
+        fixedShells.add('bash');
+      }
     }
   }
 
   lines.push('');
   lines.push(`${c.dim}Open a new shell to pick up the changes:${c.reset}`);
-  lines.push(`  ${c.cyan}exec zsh${c.reset}`);
+  if (fixedShells.has('bash') && !fixedShells.has('zsh')) {
+    lines.push(`  ${c.cyan}exec bash${c.reset}`);
+  } else if (fixedShells.has('bash') && fixedShells.has('zsh')) {
+    lines.push(`  ${c.cyan}exec zsh  # or exec bash${c.reset}`);
+  } else {
+    lines.push(`  ${c.cyan}exec zsh${c.reset}`);
+  }
   return { text: lines.join('\n'), ok: true };
 }
