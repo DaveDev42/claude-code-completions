@@ -2,38 +2,47 @@
 
 Deferred improvements. Filed here so they don't get lost between releases.
 
-## Drop the Node.js dependency
+## Drop the Node.js dependency (Rust rewrite)
 
-Today the formula has `depends_on "node"` and ships JS files plus a thin bash
-wrapper. End users have to install Node just to run a CLI that exists only to
-emit shell completions. We'd like `brew install claude-code-completions` to
-work with no language runtime visible to the user.
+`depends_on "node"` is the last visible runtime dependency. We'd like
+`brew install claude-code-completions` to work with no language runtime in
+sight. A `bun build --compile` attempt was tried and reverted (commits
+dd86cbd / 68c045d, reverted in 262f1cd) — the resulting binary was 60MB on
+darwin-arm64 and 100MB on linux-x64 because bun embeds its full runtime.
+Vendoring node was already ruled out for the same reason (~80MB bottle).
 
-**Recommended path: `bun build --compile` + Homebrew bottles.**
+**Recommended path: Rust rewrite.**
 
-- `bun build bin/claude-code-completions.js --compile --target=bun-darwin-arm64 -o dist/...`
-  produces a single self-contained binary. Cross-compile for the four targets
+- Realistic binary size with `opt-level=z` + LTO + strip + `panic=abort`:
+  400KB–1.5MB. ~50–150× smaller than the bun attempt.
+- Cross-compile via `cargo zigbuild` or a CI matrix for the four targets
   Homebrew cares about: darwin-arm64, darwin-x64, linux-arm64, linux-x64.
-- Upload the four binaries as release assets, compute sha256 per target, and
-  switch the formula to a binary install (download the matching asset, drop it
-  in `bin/`). The `install` block becomes a few `bin.install` calls; no `node`
-  dependency, no `libexec` JS tree.
-- Loaders are unaffected: they just exec `claude-code-completions generate`.
-  The wrapper script that currently shells out to `node` goes away.
+- Formula becomes four `resource` blocks pulling release assets and a couple
+  of `bin.install` calls. No language-runtime `depends_on`.
 
-**Why not POSIX shell + awk rewrite?** Possible but expensive — `src/parse.js`,
-three generators, `src/overrides.js`, and the regression tests
-(`test/generators.test.js` "5b. variadic + mutex" in particular) all need to
-move. High regression risk for a packaging concern.
+**Scope of the port** (≈2–4 weeks, dominated by regression risk, not LOC):
+- `src/parse.js` — `claude --help` text parsing, regex-heavy
+- `src/generators/{zsh,bash,fish}.js` — string emitters, three of them
+- `src/overrides.js` — static data + dynamic dispatch pattern
+- `src/doctor.js` — shell exec + dotfile editing (zsh setup repair, bash
+  bash-completion install via brew)
+- `src/audit.js` — drift checker against `claude --help`
+- All tests under `test/` — especially the `test/generators.test.js`
+  "5b. variadic + mutex" regression case (v0.2.0 production bug; the
+  intent of that test must survive the port verbatim)
 
-**Why not vendor Node into the bottle?** Bottle size balloons to ~80MB for
-something that runs for 50ms. Bad trade.
+**Why not just keep `depends_on "node"`?** It works fine today and most
+users running `claude` already have Node installed. The Rust rewrite is
+worth doing only if we want a truly self-contained Homebrew install with
+no runtime footprint. Until then this stays deferred.
 
-**Release-flow impact.** Today `npm run generate` + tag + update Formula sha is
-enough. With bottles we need a CI job that builds four binaries, uploads them,
-and updates the formula with four sha256s. `brew test-bot` or a small GitHub
-Actions matrix handles this. Not hard, but it's a one-time setup cost that
-rules this out as a same-PR change.
+**Why Rust over Go?** Go binaries land at 5–10MB — better than bun, but
+not dramatically smaller than vendoring node. Rust gets us to <2MB, which
+is the only size that justifies the rewrite cost.
+
+**Release-flow impact.** `npm run generate` + tag + Formula sha update
+becomes a CI matrix that builds four binaries, uploads them as release
+assets, and updates the Formula with four sha256s.
 
 ## Smaller follow-ups
 
