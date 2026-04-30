@@ -8,9 +8,11 @@ loader가 설치된 `claude` 버전에 맞춰 캐시된 completion을 소싱하�
 
 ## 기술 스택
 
-- Node.js >= 18, ESM (`"type": "module"`)
+- Node.js >= 18, ESM (`"type": "module"`) — 개발 / `npm test` 용
 - 외부 런타임 의존성 없음 (표준 라이브러리만 사용)
-- Homebrew 배포 (`Formula/` 디렉토리)
+- Homebrew 배포 (`Formula/` 디렉토리). 사용자 머신에서는 `bun build --compile` 으로
+  빌드한 self-contained 바이너리가 설치되므로 Node 가 필요 없다 (`scripts/build-binaries.sh`
+  + `.github/workflows/release.yml`).
 
 ## 명령어
 
@@ -25,6 +27,11 @@ npm test
 node bin/claude-code-completions.js generate --shell zsh --out ./completions
 node bin/claude-code-completions.js generate --all --out ./completions
 node bin/claude-code-completions.js parse   # IR을 JSON으로 stdout 출력
+
+# 4개 타겟 self-contained 바이너리 빌드 (요구: bun)
+npm run build:binaries
+# 한 타겟만 빌드:
+scripts/build-binaries.sh darwin-arm64
 ```
 
 로컬에서 `claude` 바이너리 없이 개발하려면 저장된 help 출력을 넘긴다:
@@ -81,6 +88,17 @@ XDG_CACHE_HOME=/tmp/xdg CLAUDE_COMPLETIONS_BIN="$PWD/bin/claude-code-completions
   머지 부담만 큼). 필요 시 수동으로 `npm run generate` + commit.
 - Repo에 편집 금지 바이너리 결과물: `completions/` (생성물). 수정은 `src/` 또는
   `src/overrides.js` 에서.
+
+## 바이너리 빌드 주의
+
+`bun build --compile` 이 만든 macOS 바이너리는 **반드시 ad-hoc 코드사인**이 필요하다.
+macOS 14+ 가 unsigned arm64 binary 를 SIGKILL (exit 137) 로 죽인다 — 그것도 stdin/stdout
+이 TTY 가 아닐 때만 (파이프 / 리다이렉트). `scripts/build-binaries.sh` 가 자동으로 한다.
+
+수동으로 할 땐 `codesign --remove-signature` → `codesign -s -` 두 단계가 필요하다.
+한 번에 `codesign -s -` 하면 "invalid or unsupported format for signature" 로 실패함
+(bun 이 Mach-O 끝에 payload 를 append 하는 구조 때문). `--remove-signature` 가 unsigned
+파일에서도 load command tail 을 정리해 주는 듯.
 
 ## generator 주의
 

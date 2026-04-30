@@ -1,0 +1,111 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to (re)build binaries for, e.g. v0.5.0'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: darwin-arm64
+            runs-on: macos-14
+            bun-target: bun-darwin-arm64
+          - label: darwin-x64
+            runs-on: macos-13
+            bun-target: bun-darwin-x64
+          - label: linux-x64
+            runs-on: ubuntu-latest
+            bun-target: bun-linux-x64
+          - label: linux-arm64
+            runs-on: ubuntu-24.04-arm
+            bun-target: bun-linux-arm64
+    runs-on: ${{ matrix.runs-on }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.12'
+
+      - name: Build binary
+        run: scripts/build-binaries.sh ${{ matrix.label }}
+
+      - name: Compute sha256
+        id: sha
+        run: |
+          out="dist/claude-code-completions-${{ matrix.label }}"
+          if command -v shasum >/dev/null 2>&1; then
+            sha="$(shasum -a 256 "$out" | awk '{print $1}')"
+          else
+            sha="$(sha256sum "$out" | awk '{print $1}')"
+          fi
+          echo "sha256=$sha" >> "$GITHUB_OUTPUT"
+          echo "$sha  $(basename "$out")" > "$out.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: claude-code-completions-${{ matrix.label }}
+          path: |
+            dist/claude-code-completions-${{ matrix.label }}
+            dist/claude-code-completions-${{ matrix.label }}.sha256
+          if-no-files-found: error
+
+  release:
+    name: publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List downloaded assets
+        run: ls -la dist/
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [[ -n "${{ inputs.tag }}" ]]; then
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          # Create the release if it doesn't exist yet (tag-push trigger usually
+          # has no GitHub release object yet). --notes-start-tag is best-effort.
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$tag" --generate-notes
+          fi
+          gh release upload "$tag" --clobber dist/claude-code-completions-*
+
+      - name: Print sha256 summary
+        run: |
+          echo "### Binary checksums" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat dist/*.sha256 >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
