@@ -7,8 +7,7 @@
   },
   "scripts": {
     "generate": "node bin/claude-code-completions.js generate --all --out completions",
-    "test": "node test/parse.test.js && node test/generators.test.js && node test/audit.test.js && node test/doctor.test.js && node test/loaders.test.js",
-    "build:binaries": "scripts/build-binaries.sh"
+    "test": "node test/parse.test.js && node test/generators.test.js && node test/audit.test.js && node test/doctor.test.js && node test/loaders.test.js"
   },
   "repository": {
     "type": "git",
