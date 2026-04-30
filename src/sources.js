@@ -54,9 +54,16 @@ function projectDirs(cwd) {
 }
 
 // Sessions: ~/.claude/projects/<cwd-slug>/*.jsonl
-// Value = UUID (filename stem). Description = first `summary` entry, or first
-// user message content, truncated. Sort by mtime descending so most recent
-// sessions appear first in the picker.
+// claude --resume accepts session ID, the auto-generated slug ("crispy-moseying-kay"),
+// or a user-set name (claude --name foo). Pick the friendliest that exists:
+// user name > slug > UUID. Description = first `summary` entry or first user
+// message text. Sort by mtime descending so recent sessions appear first.
+//
+// To keep cold-path latency low (the helper spawns per Tab), only the top
+// SUMMARY_LIMIT sessions get their jsonl scanned; the rest emit value-only.
+const SUMMARY_LIMIT = 50;
+const SCAN_BYTES = 32768;
+
 export function listSessions(cwd = process.cwd()) {
   const files = [];
   const seen = new Set();
@@ -75,36 +82,74 @@ export function listSessions(cwd = process.cwd()) {
     }
   }
   files.sort((a, b) => b.mtime - a.mtime);
-  return files.map(({ uuid, path }) => `${uuid}\t${sanitize(extractSummary(path))}`);
+
+  const liveNames = liveSessionNames();
+  return files.map(({ uuid, path }, i) => {
+    const scan = i < SUMMARY_LIMIT ? scanJsonl(path) : { summary: '', slug: '' };
+    // sanitize value too: a `--name "foo\tbar"` or a corrupted slug would
+    // otherwise inject a tab and break the `<value>\t<description>` format.
+    const value = sanitize(liveNames.get(uuid) || scan.slug) || uuid;
+    return `${value}\t${sanitize(scan.summary)}`;
+  });
 }
 
-// Read up to ~64KB of the jsonl, scan for the first useful description.
-// Priority: a {"type":"summary","summary":"..."} entry, else the first
-// user message text content.
-function extractSummary(path) {
+// Active sessions write {pid}.json with {sessionId, name?} while running.
+// `name` is the user-set --name (or rename via /name). After exit the file
+// is removed, so this only surfaces names for live sessions — slugs in the
+// jsonl cover the rest.
+function liveSessionNames() {
+  const out = new Map();
+  const dir = join(homedir(), '.claude', 'sessions');
+  let entries;
+  try { entries = readdirSync(dir); } catch { return out; }
+  for (const name of entries) {
+    if (!name.endsWith('.json')) continue;
+    let obj;
+    try { obj = JSON.parse(readFileSync(join(dir, name), 'utf8')); } catch { continue; }
+    if (obj && typeof obj.sessionId === 'string' && typeof obj.name === 'string' && obj.name) {
+      out.set(obj.sessionId, obj.name);
+    }
+  }
+  return out;
+}
+
+// Single pass over the first SCAN_BYTES of the jsonl. Picks up:
+//  - summary: an explicit {"type":"summary","summary":"..."} entry, else the
+//    first user message text.
+//  - slug: the auto-generated session name. Only read from envelope lines
+//    (those carrying `sessionId`) so unrelated nested `slug` fields — e.g.
+//    a tool input that happens to use that key — can't poison the value.
+// Stops as soon as a description (summary or user fallback) and slug are both
+// in hand.
+function scanJsonl(path) {
   let text;
   try {
     const buf = readFileSync(path, { encoding: 'utf8' });
-    text = buf.length > 65536 ? buf.slice(0, 65536) : buf;
-  } catch { return ''; }
+    text = buf.length > SCAN_BYTES ? buf.slice(0, SCAN_BYTES) : buf;
+  } catch { return { summary: '', slug: '' }; }
+
+  let summary = '';
+  let slug = '';
+  let userFallback = '';
   for (const line of text.split('\n')) {
     if (!line) continue;
     let obj;
     try { obj = JSON.parse(line); } catch { continue; }
-    if (obj.type === 'summary' && typeof obj.summary === 'string') return obj.summary;
-  }
-  for (const line of text.split('\n')) {
-    if (!line) continue;
-    let obj;
-    try { obj = JSON.parse(line); } catch { continue; }
-    if (obj.type === 'user' && obj.message && obj.message.role === 'user') {
+    if (!summary && obj.type === 'summary' && typeof obj.summary === 'string') {
+      summary = obj.summary;
+    }
+    if (!slug && typeof obj.slug === 'string' && obj.slug && typeof obj.sessionId === 'string') {
+      slug = obj.slug;
+    }
+    if (!userFallback && obj.type === 'user' && obj.message && obj.message.role === 'user') {
       const c = obj.message.content;
-      if (typeof c === 'string') return c;
-      if (Array.isArray(c)) {
+      if (typeof c === 'string') userFallback = c;
+      else if (Array.isArray(c)) {
         const first = c.find(p => p && p.type === 'text' && typeof p.text === 'string');
-        if (first) return first.text;
+        if (first) userFallback = first.text;
       }
     }
+    if ((summary || userFallback) && slug) break;
   }
-  return '';
+  return { summary: summary || userFallback, slug };
 }
