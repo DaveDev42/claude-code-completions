@@ -91,3 +91,19 @@ v0.2.0 에서 이 버그가 production 까지 갔다. v0.3.0 에서는 variadic 
 한 줄씩 펼쳐 emit. `test/generators.test.js` 의 "5b. variadic + mutex" 회귀 케이스
 참고. 새 zsh 패턴 추가 시 `zsh -n` 만으로는 부족하고 `compinit` 후 실제 source
 시뮬까지 해보는 게 안전.
+
+## 릴리즈
+
+전자동. 사람이 직접 돌릴 일은 거의 없음.
+
+- **release-please** + `.github/workflows/release-please.yml` 가 PR 생성 → tag → GitHub Release →
+  `daveddev42/homebrew-tap` 의 `Formula/claude-code-completions.rb` 갱신 → 이 repo 의 `Formula/`
+  도 sync push 까지 자동.
+- `.claude/commands/release.md` 의 `/release` 명령이 release-please PR gate / merge / watch /
+  verify (tap 까지) 를 1 명령으로 처리한다. tap update step 은 실패해도 `::warning::` 로
+  swallow 되므로 — `/release` 명령이 그 swallowed warning 을 grep 으로 잡는 게 핵심 동기.
+- Major/minor 가 필요하면 `Release-As: x.y.z` footer 커밋을 `main` 에 push (release-please 자동 인식).
+- 절대 금지: `feat!` / `fix!` / `BREAKING CHANGE:` — major bump 자동 트리거 (0.x → 1.0.0).
+- 필요한 secret: `daveddev42/claude-code-completions` repo 에 `HOMEBREW_TAP_TOKEN`
+  (fine-grained PAT, Contents: R/W on `daveddev42/homebrew-tap`). 미설정 시 release-please.yml 의
+  tap update step 이 `::warning::HOMEBREW_TAP_TOKEN not set` 로 swallow 하고 통과.
