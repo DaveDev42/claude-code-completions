@@ -1,6 +1,6 @@
 {
   "name": "claude-code-completions",
-  "version": "0.4.6",
+  "version": "0.4.7",
   "description": "Shell completions for the Claude Code CLI (zsh, bash, fish)",
   "bin": {
     "claude-code-completions": "bin/claude-code-completions.js"
